@@ -38,6 +38,12 @@ export const BoxUnion = (A: BoxType, B: BoxType):BoxType => ({tag: "union", A, B
 export const BoxInter = (A: BoxType, B: BoxType):BoxType => ({tag: "inter", A, B})
 
 
+export function cast(value: Primitive, type: BoxType): Primitive {
+  if (checkType(value, type)) return value
+  return null
+}
+
+
 
 
 export const fromTs : (type: string) => BoxType = (type) => {

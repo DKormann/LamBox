@@ -1,5 +1,6 @@
 import { PubKey } from "./auth"
-import { newPerson, Person } from "./userspace"
+import { BoxArray, BoxString, cast } from "./boxtypes"
+import { findServer, newPerson, Person } from "./userspace"
 
 
 
@@ -8,39 +9,45 @@ const msg : string = "userscript loaded"
 const me = newPerson()
 
 
+type UserSpec = {
 
-const User = {
+  accept_follow: (self: Person) => void
+  accept_private_message: (self: Person, arg: string) => void
+  
+}
 
-  accept_follow: (self: Person, me: Person) => {
-    self.store_secret("followers", me.pubkey)
-    me.store_secret("follows", self.pubkey)
-    return true
+
+const User : UserSpec = {
+
+  accept_follow: (self: Person) => {
+    self.secretStore.update("followers", followers=>{
+      const fls = (cast(followers, BoxArray(BoxString)) || []) as string[]
+      return [...fls, me.pubkey]
+    })
+    me.pubStore.update("follows", follows=>{
+      const fls = (cast(follows, BoxArray(BoxString)) || []) as string[]
+      return [...fls, self.pubkey]
+    })
+  },
+
+  accept_private_message: (self: Person, arg: string) =>{
+    self.secretStore.update("messages", msgs =>{
+      const ms = (cast(msgs, BoxArray(BoxString)) || []) as string[]
+      return [...ms, `${me.pubkey}: ${arg}`]
+    })
+
   }
-
-  accept_unfollow: (self: Person, me: Person) =>{
-    self.store_secret("followers", me.pubkey)
-  }
-
 }
 
 
 
-
-function accep_follower(request: Person){
-
-}
+const server = findServer("http://localhost:8080", me.pubkey, User)
 
 
+function send_message(target: PubKey, message: string){
 
-function follow(friend: Person){
-
-  me.store_secret("follows", friend.pubkey)
-  friend.store_secret("followers", me.pubkey)
-
-  friend.requst
+  server.request_user_function(target, User.accept_private_message).then(func => func(message))
 
 }
-
-
 
 
