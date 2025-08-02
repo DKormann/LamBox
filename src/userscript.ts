@@ -4,16 +4,10 @@ import { findServer, newPerson, Person } from "./userspace"
 
 
 
-const msg : string = "userscript loaded"
-
-const me = newPerson()
-
 
 type UserSpec = {
-
   accept_follow: (self: Person) => void
   accept_private_message: (self: Person, arg: string) => void
-  
 }
 
 
@@ -39,14 +33,13 @@ const User : UserSpec = {
   }
 }
 
-
-
+const me = newPerson()
 const server = findServer("http://localhost:8080", me.pubkey, User)
 
 
 function send_message(target: PubKey, message: string){
 
-  server.request_user_function(target, User.accept_private_message).then(func => func(message))
+  server.request(target, User.accept_private_message, message)
 
 }
 
