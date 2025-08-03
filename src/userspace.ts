@@ -68,20 +68,20 @@ export const newPerson = (): Person => {
 }
   
 export type Server <UserSpec extends Object> = {
-  request: <Arg extends Primitive, Ret extends Primitive> (pubkey: PubKey, func:(self:Person, arg: Arg) => Ret|void, arg:Arg) => Promise<Ret|void>
+  request: <Arg extends Primitive, Ret extends Primitive> (pubkey: PubKey,  func:(self:Person, other:Person, arg: Arg) => Ret|void, arg:Arg) => Promise<Ret|void>
 }
 
 export const findServer = <UserSpec extends Object>(url: string, pubkey: PubKey, userSpec: UserSpec): Server<UserSpec>=> {
 
   return {
-    request: async <Arg extends Primitive, Ret extends Primitive > (pubkey: PubKey, func: (self:Person, arg: Arg) => Ret|void, arg: Arg) : Promise<Ret|void> => {
+    request: async <Arg extends Primitive, Ret extends Primitive > (pubkey: PubKey, func: (self:Person, other:Person, arg: Arg) => Ret|void, arg: Arg) : Promise<Ret|void> => {
 
       const fname = func.name
       if (!userSpec.hasOwnProperty(fname)){
         console.warn(`${fname} not found in user spec`)
       }
 
-      const dummy_result: Ret|void = func(newPerson(), arg)
+      const dummy_result: Ret|void = func(newPerson(), newPerson() , arg)
       return dummy_result
 
     }

@@ -6,8 +6,8 @@ import { findServer, newPerson, Person } from "./userspace"
 
 
 type UserSpec = {
-  accept_follow: (self: Person) => void
-  accept_private_message: (self: Person, arg: string) => void
+  accept_follow: (self: Person, me: Person) => void
+  accept_private_message: (self: Person, me:Person,  arg: string) => void
 }
 
 
@@ -15,13 +15,13 @@ const msgSchema = ArraySchema(StringSchema)
 const followListSchema = ArraySchema(StringSchema)
 
 
-const User : UserSpec = {
+export const User : UserSpec = {
 
-  accept_follow: (self: Person) => {
+  accept_follow: (self: Person, me: Person) => {
     self.secretStore.updateBox<string[]>("followers", followers=> [...followers, me.pubkey], followListSchema)
     me.pubStore.updateBox<string[]>("follows", follows=> [...follows, self.pubkey], followListSchema)
   },
-  accept_private_message: (self: Person, arg: string) =>{
+  accept_private_message: (self: Person, me:Person,  arg: string) =>{
     self.secretStore.updateBox<string[]>("messages", msgs => [...msgs, `${me.pubkey}: ${arg}`], msgSchema)
   }
 }
