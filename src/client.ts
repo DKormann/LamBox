@@ -1,7 +1,7 @@
 import { auth, PubKey } from "./auth"
 import { Stored, Writable } from "./store"
 import {Request, SHA256} from "./box"
-import { Primitive } from "./boxtypes"
+import { Primitive } from "./dataSchemas"
 
 export {}
 

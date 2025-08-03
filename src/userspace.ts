@@ -1,5 +1,5 @@
 import { auth, PubKey } from "./auth"
-import { Primitive } from "./boxtypes"
+import { DataSchema, Primitive } from "./dataSchemas"
 
 
 
@@ -7,6 +7,10 @@ export type Store = {
   get: (key: string) => Primitive
   set: (key: string, value: Primitive) => void
   update: (key: string, func: (value: Primitive) => Primitive) => void
+
+  getBox: <T extends Primitive>(key: string, type: DataSchema) => T
+  setBox: <T extends Primitive>(key: string, value: T, type: DataSchema) => void
+  updateBox: <T extends Primitive>(key: string, func: (value: T) => T, type: DataSchema) => void
 }
 
 
@@ -29,6 +33,15 @@ export const newPerson = (): Person => {
       },
       update: (key: string, func: (value: Primitive) => Primitive) => {
         throw new Error("Not implemented") 
+      },
+      getBox: <T extends Primitive>(key: string, type: DataSchema) => {
+        throw new Error("Not implemented") 
+      },
+      setBox: <T extends Primitive>(key: string, value: T, type: DataSchema) => {
+        throw new Error("Not implemented") 
+      },
+      updateBox: <T extends Primitive>(key: string, func: (value: T) => T, type: DataSchema) => {
+        throw new Error("Not implemented") 
       }
     },
     secretStore: {
@@ -40,6 +53,15 @@ export const newPerson = (): Person => {
       },
       update: (key: string, func: (value: Primitive) => Primitive) => {
         throw new Error("Not implemented") 
+      },
+      getBox: <T extends Primitive>(key: string, type: DataSchema) => {
+        throw new Error("Not implemented") 
+      },
+      setBox: <T extends Primitive>(key: string, value: T, type: DataSchema) => {
+        throw new Error("Not implemented") 
+      },
+      updateBox: <T extends Primitive>(key: string, func: (value: T) => T, type: DataSchema) => {
+        throw new Error("Not implemented") 
       }
     }
   }
@@ -47,7 +69,6 @@ export const newPerson = (): Person => {
   
 export type Server <UserSpec extends Object> = {
   request: <Arg extends Primitive, Ret extends Primitive> (pubkey: PubKey, func:(self:Person, arg: Arg) => Ret|void, arg:Arg) => Promise<Ret|void>
-
 }
 
 export const findServer = <UserSpec extends Object>(url: string, pubkey: PubKey, userSpec: UserSpec): Server<UserSpec>=> {

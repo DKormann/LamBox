@@ -1,6 +1,6 @@
 import { PubKey, signEvent,  } from "./auth"
 import { Event, nip19, VerifiedEvent,  } from "nostr-tools"
-import { BoxType, Primitive } from "./boxtypes"
+import { DataSchema, Primitive } from "./dataSchemas"
 
 
 type lamHash = string
@@ -13,7 +13,7 @@ type Lambda = string
 type StoreKey = {
   owner: PubKey,
   key: resultKey,
-  type: BoxType
+  type: DataSchema
 }
 
 type StoreItem = {

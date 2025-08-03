@@ -1,5 +1,5 @@
 import { PubKey } from "./auth"
-import { BoxArray, BoxString, cast } from "./boxtypes"
+import { ArraySchema, StringSchema, cast, Primitive } from "./dataSchemas"
 import { findServer, newPerson, Person } from "./userspace"
 
 
@@ -11,25 +11,18 @@ type UserSpec = {
 }
 
 
+const msgSchema = ArraySchema(StringSchema)
+const followListSchema = ArraySchema(StringSchema)
+
+
 const User : UserSpec = {
 
   accept_follow: (self: Person) => {
-    self.secretStore.update("followers", followers=>{
-      const fls = (cast(followers, BoxArray(BoxString)) || []) as string[]
-      return [...fls, me.pubkey]
-    })
-    me.pubStore.update("follows", follows=>{
-      const fls = (cast(follows, BoxArray(BoxString)) || []) as string[]
-      return [...fls, self.pubkey]
-    })
+    self.secretStore.updateBox<string[]>("followers", followers=> [...followers, me.pubkey], followListSchema)
+    me.pubStore.updateBox<string[]>("follows", follows=> [...follows, self.pubkey], followListSchema)
   },
-
   accept_private_message: (self: Person, arg: string) =>{
-    self.secretStore.update("messages", msgs =>{
-      const ms = (cast(msgs, BoxArray(BoxString)) || []) as string[]
-      return [...ms, `${me.pubkey}: ${arg}`]
-    })
-
+    self.secretStore.updateBox<string[]>("messages", msgs => [...msgs, `${me.pubkey}: ${arg}`], msgSchema)
   }
 }
 
