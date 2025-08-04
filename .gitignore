@@ -3,3 +3,4 @@ node_modules
 **/env.ts
 **/.db.backup
 
+package-lock.json

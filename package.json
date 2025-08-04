@@ -10,9 +10,11 @@
     "start:server": "node dist/server.js"
   },
   "devDependencies": {
-
-    "typescript": "^4.5.4",
-    "vite": "^3.0.7",
-    "tsx": "^4.0.1"
+    "tsx": "^4.0.1",
+    "typescript": "^5.9.2",
+    "vite": "^5.0.12"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.16.1"
   }
 }
