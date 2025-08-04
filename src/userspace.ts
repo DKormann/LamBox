@@ -66,12 +66,12 @@ export async function BoxTable(bx:BoxSerial){
 
 
 
-export async function ServerLogin(url:string, box:Box<any>, key:SecKey) {
+export async function ServerLogin(url:string, box:Box<any>, key:Key) {
 
-  const pub = auth.keyFromNsec(key).pub
+
 
   async function sendRequest(request:Request){
-    const event = signEvent(JSON.stringify(request), key)
+    const event = signEvent(JSON.stringify(request), key.sec)
 
     const resp = await fetch(url, {
       method: "POST",
@@ -88,13 +88,13 @@ export async function ServerLogin(url:string, box:Box<any>, key:SecKey) {
   const bserial = Box2Serial(box)
   const btable = await BoxTable(bserial)
   await sendRequest({
-    pubkey: pub,
+    pubkey: key.pub,
     tag: "publish",
     app: bserial,
   })
 
   await sendRequest({
-    pubkey: pub,
+    pubkey: key.pub,
     tag: "host",
     hash: btable.hash,
     allowed: true,
@@ -107,7 +107,7 @@ export async function ServerLogin(url:string, box:Box<any>, key:SecKey) {
     }
     const request: Request = {
       tag: "call",
-      pubkey: pub,
+      pubkey: key.pub,
       app: btable.hash,
       lam: lamHash,
       host: target,
