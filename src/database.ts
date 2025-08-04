@@ -97,7 +97,7 @@ export async function acceptHost(request: Request & {tag: "host"}){
 }
 
 
-function getStore(owner: PubKey): Store{
+function getStore(app: appHash, owner: PubKey): Store{
   let userStore = db.store.get(owner)
   if (!userStore){
     userStore = {
@@ -106,11 +106,13 @@ function getStore(owner: PubKey): Store{
     }
     db.store.set(owner, userStore)
   }
-  return (key:string, secret: boolean) => ({
+  return (key:string, secret: boolean) => {
+    key = app + ":" + key
+    return {
     get: () => userStore[secret ? "secret" : "public"].get(key) ?? null,
     set: (value: Serial) => userStore[secret ? "secret" : "public"].set(key, value),
     update: (func: (value: Serial) => Serial) => userStore[secret ? "secret" : "public"].set(key, func(userStore[secret ? "secret" : "public"].get(key) ?? null))
-  })
+  }}
 }
 
 
@@ -125,8 +127,8 @@ export async function acceptCall(request: Request & {tag: "call"}){
   const lambda = db.lambdas.get(request.lam)
 
   const func = new Function("ctx", "self", "other", "arg", "return " + lambda)() as APIFunction
-  const self = {pubkey: request.pubkey, store: getStore(request.pubkey)}
-  const other = {pubkey: request.host, store: getStore(request.host)}
+  const self = {pubkey: request.pubkey, store: getStore(request.app, request.pubkey)}
+  const other = {pubkey: request.host, store: getStore(request.app, request.host)}
 
   const res = func(app.ctx, self, other, request.argument)  
   return res ?? null

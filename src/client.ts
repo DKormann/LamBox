@@ -17,7 +17,7 @@ export const msgBox : Box <Ctx> = {
 
   api : {
     putMsg: (ctx:Ctx, self:Person, other:Person, arg: Serial )=>{
-      ctx.msgs(other).update(msgs => [...(msgs ?? []), arg as [string,string]])
+      ctx.msgs(other).update(msgs => [...(msgs ?? []), [self.pubkey, arg as string]])
     },
     seeMsgs: (ctx:Ctx, self:Person, other:Person, arg: Serial ):[string,string][]=>{
       return ctx.msgs(self).get() ?? []
@@ -40,6 +40,6 @@ ServerLogin(serverurl, msgBox, seckey).then(async conn=>{
   const resp = await conn(pub, msgBox.api.seeMsgs, pub) as [string,string][]
   console.log(resp)
 
-})
+}).catch(console.error)
 
 

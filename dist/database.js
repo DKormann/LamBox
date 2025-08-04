@@ -130,7 +130,7 @@ function acceptHost(request) {
         });
     });
 }
-function getStore(owner) {
+function getStore(app, owner) {
     var userStore = db.store.get(owner);
     if (!userStore) {
         userStore = {
@@ -139,11 +139,14 @@ function getStore(owner) {
         };
         db.store.set(owner, userStore);
     }
-    return function (key, secret) { return ({
-        get: function () { var _a; return (_a = userStore[secret ? "secret" : "public"].get(key)) !== null && _a !== void 0 ? _a : null; },
-        set: function (value) { return userStore[secret ? "secret" : "public"].set(key, value); },
-        update: function (func) { var _a; return userStore[secret ? "secret" : "public"].set(key, func((_a = userStore[secret ? "secret" : "public"].get(key)) !== null && _a !== void 0 ? _a : null)); }
-    }); };
+    return function (key, secret) {
+        key = app + ":" + key;
+        return {
+            get: function () { var _a; return (_a = userStore[secret ? "secret" : "public"].get(key)) !== null && _a !== void 0 ? _a : null; },
+            set: function (value) { return userStore[secret ? "secret" : "public"].set(key, value); },
+            update: function (func) { var _a; return userStore[secret ? "secret" : "public"].set(key, func((_a = userStore[secret ? "secret" : "public"].get(key)) !== null && _a !== void 0 ? _a : null)); }
+        };
+    };
 }
 function acceptCall(request) {
     return __awaiter(this, void 0, void 0, function () {
@@ -159,8 +162,8 @@ function acceptCall(request) {
                 return [2 /*return*/, null];
             lambda = db.lambdas.get(request.lam);
             func = new Function("ctx", "self", "other", "arg", "return " + lambda)();
-            self = { pubkey: request.pubkey, store: getStore(request.pubkey) };
-            other = { pubkey: request.host, store: getStore(request.host) };
+            self = { pubkey: request.pubkey, store: getStore(request.app, request.pubkey) };
+            other = { pubkey: request.host, store: getStore(request.app, request.host) };
             res = func(app.ctx, self, other, request.argument);
             return [2 /*return*/, res !== null && res !== void 0 ? res : null];
         });
