@@ -1,6 +1,6 @@
 import  * as http from "http"
 import * as fs from "fs"
-import { acceptEvent } from "./box"
+import { acceptEvent } from "./database"
 import { auth, Event } from "./auth";
 
 const hostname = '127.0.0.1';

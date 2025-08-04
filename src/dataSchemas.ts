@@ -1,5 +1,5 @@
 
-export type Primitive = string | number | boolean | null | Primitive [] | { [key: string]: Primitive }
+export type Serial = string | number | boolean | null | Serial [] | { [key: string]: Serial }
 
 export type DataSchema =
   "any" |
@@ -10,7 +10,7 @@ export type DataSchema =
   {tag: "inter", A: DataSchema, B:DataSchema}
 
 
-export const checkType = (value: Primitive, type: DataSchema) : boolean => {
+export const checkType = (value: Serial, type: DataSchema) : boolean => {
   if (type === "any") return true
   if (type === "string") return typeof value === "string"
   if (type === "number") return typeof value === "number"
@@ -19,7 +19,7 @@ export const checkType = (value: Primitive, type: DataSchema) : boolean => {
   if (type.tag === "array"){ return Array.isArray(value) && value.every(v => checkType(v, type.type)) }
   if (type.tag === "item"){
     if (typeof value != "object") return false
-    const k = (value as { [key: string]: Primitive | undefined })[type.key]
+    const k = (value as { [key: string]: Serial | undefined })[type.key]
     if (k == undefined) return false
     return checkType(k, type.value)
   }
@@ -35,6 +35,7 @@ export const BooleanSchema: DataSchema = "boolean"
 export const NullSchema: DataSchema = "null"
 export const ArraySchema = (type: DataSchema):DataSchema => ({tag: "array", type})
 export const ItemSchema = (key: string, value: DataSchema):DataSchema => ({tag: "item", key, value})
+
 export const ObjectSchema = (obj: Record<string, DataSchema>):DataSchema => {
     const itr = Object.entries(obj)
     return itr.slice(1).reduce((acc:DataSchema, [key, value]) => UnionSchema(acc, ItemSchema(key, value)), ItemSchema(itr[0][0], itr[0][1]))
@@ -43,7 +44,7 @@ export const UnionSchema = (A: DataSchema, B: DataSchema):DataSchema => ({tag: "
 export const InterSchema = (A: DataSchema, B: DataSchema):DataSchema => ({tag: "inter", A, B})
 
 
-export function cast(value: Primitive, type: DataSchema): Primitive {
+export function cast(value: Serial, type: DataSchema): Serial {
   if (checkType(value, type)) return value
   return null
 }

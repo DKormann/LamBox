@@ -19,7 +19,6 @@ export class Writable <T> {
     this.value = newValue
   }
 
-
   update(updater: (value: T) => T, force = false): void {
     const newValue = updater(this.value)
     this.set(newValue, force)

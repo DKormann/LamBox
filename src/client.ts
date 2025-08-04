@@ -1,77 +1,57 @@
-import { auth, Key, PubKey } from "./auth"
+import { auth, Key, PubKey, signEvent } from "./auth"
 import { Stored, Writable } from "./store"
-import {Request, SHA256} from "./box"
-import { Primitive } from "./dataSchemas"
-
-export {}
-
-// const secret = new Stored<string> ("nsecret", "")
-// if (!secret.get()) secret.set(auth.randomKey().sec)
+import {Request, SHA256} from "./database"
+import { Serial } from "./dataSchemas"
+import { APIFunction, Box, Box2Serial, BoxTable } from "./userspace"
 
 
 
+export async function ServerLogin(url:string, box:Box<any>, key:Key) {
 
-// const key = auth.keyFromNsec(secret.get()!)
-// const pubkey = key.pub
-
-export async function setup(serverurl:string, key: Key){
-
-  const pubkey = key.pub
-
-  // const hash = await SHA256(code)
-  // await publish(code).catch(console.error)
-  // await host(hash).catch(console.error)
-  // console.log(await call(hash, key.pub, "hello"))
-  
-  function publish(code:string){
-    return sendRequest({
-      pubkey,
-      tag: "publish",
-      code
-    })
-  }
-  
-  function host(hash:string){
-    return sendRequest({
-      pubkey,
-      tag: "host",
-      hash,
-      allowed: true
-    })
-  }
-  
-  function call(hash:string, host:PubKey, arg:Primitive){
-    return sendRequest({
-      pubkey,
-      tag: "call",
-      hash,
-      host,
-      argument: arg
-    })
-  }
-  
-  
   async function sendRequest(request:Request){
-    const r = await fetch(serverurl, {
+    const event = signEvent(JSON.stringify(request), key.sec)
+    const resp = await fetch(url, {
       method: "POST",
-      body: JSON.stringify(
-        key.sign(JSON.stringify(request))
-      )
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(event)
     })
-    return await r.text()
+    return resp.json()
+
   }
 
-  return {
-    publish,
-    host,
-    call
+  const bserial = Box2Serial(box)
+  const btable = await BoxTable(bserial)
+
+  await sendRequest({
+    pubkey: key.pub,
+    tag: "publish",
+    app: bserial,
+  })
+
+  await sendRequest({
+    pubkey: key.pub,
+    tag: "host",
+    hash: btable.hash,
+    allowed: true,
+  })
+
+  return async (target:PubKey, lam:APIFunction, arg:Serial) =>{
+    const lamHash = await SHA256(lam.toString())
+    if (!Object.values(btable.apiHashes).includes(lamHash)) throw new Error("illegal lambda")
+    const request: Request = {
+      tag: "call",
+      pubkey: key.pub,
+      app: btable.hash,
+      lam: lamHash,
+      host: target,
+      argument: arg
+    }
+    const resp = await sendRequest(request)
+    return resp
   }
+
 }
 
 
-// import ts from 'typescript';
-
-// const sourceCode = `string | boolean`;
-// const sourceFile = ts.createSourceFile('example.ts', sourceCode, ts.ScriptTarget.Latest, true);
-
-// console.log(sourceFile.statements); // AST nodes
