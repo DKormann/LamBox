@@ -1,4 +1,4 @@
-import { Key, PubKey } from "./auth"
+import { auth, Key, PubKey, SecKey } from "./auth"
 import { SHA256, Request } from "./database"
 import { Serial } from "./dataSchemas"
 import { signEvent } from "./auth"
@@ -66,10 +66,12 @@ export async function BoxTable(bx:BoxSerial){
 
 
 
-export async function ServerLogin(url:string, box:Box<any>, key:Key) {
+export async function ServerLogin(url:string, box:Box<any>, key:SecKey) {
+
+  const pub = auth.keyFromNsec(key).pub
 
   async function sendRequest(request:Request){
-    const event = signEvent(JSON.stringify(request), key.sec)
+    const event = signEvent(JSON.stringify(request), key)
 
     const resp = await fetch(url, {
       method: "POST",
@@ -86,13 +88,13 @@ export async function ServerLogin(url:string, box:Box<any>, key:Key) {
   const bserial = Box2Serial(box)
   const btable = await BoxTable(bserial)
   await sendRequest({
-    pubkey: key.pub,
+    pubkey: pub,
     tag: "publish",
     app: bserial,
   })
 
   await sendRequest({
-    pubkey: key.pub,
+    pubkey: pub,
     tag: "host",
     hash: btable.hash,
     allowed: true,
@@ -105,7 +107,7 @@ export async function ServerLogin(url:string, box:Box<any>, key:Key) {
     }
     const request: Request = {
       tag: "call",
-      pubkey: key.pub,
+      pubkey: pub,
       app: btable.hash,
       lam: lamHash,
       host: target,

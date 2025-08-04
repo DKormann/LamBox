@@ -1,5 +1,5 @@
 
-export type Serial = string | number | boolean | null | Serial [] | { [key: string]: Serial }
+export type Serial = string | number | boolean | null | Serial [] | { [key: string]: Serial } | [Serial, Serial]
 
 export type DataSchema =
   "any" |

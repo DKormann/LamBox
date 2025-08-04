@@ -1,39 +1,40 @@
 
-import { auth } from "./auth"
+import { auth, SecKey } from "./auth"
 import { Serial } from "./dataSchemas"
 import { Person, DataHandle, Box, Table, ServerLogin } from "./userspace"
 
 
 type Ctx = {
-  msgs: Table<string[]>,
+  msgs: Table<[string,string][]>,
 }
 
 export const msgBox : Box <Ctx> = {
   getCtx : () => {
     return {
-      msgs : (p:Person) => p.store("msgs", true) as DataHandle<string[]>
+      msgs : (p:Person) => p.store("msgs", true) as DataHandle<[string,string][]>,
     }
   },
 
   api : {
     putMsg: (ctx:Ctx, self:Person, other:Person, arg: Serial )=>{
-      ctx.msgs(other).update(msgs => [...(msgs ?? []), arg as string])
+      ctx.msgs(other).update(msgs => [...(msgs ?? []), arg as [string,string]])
     },
-    seeMsgs: (ctx:Ctx, self:Person, other:Person, arg: Serial ):string[]=>{
+    seeMsgs: (ctx:Ctx, self:Person, other:Person, arg: Serial ):[string,string][]=>{
       return ctx.msgs(self).get() ?? []
     }
   },
 
 }
 
-const key = auth.randomKey()
 
-ServerLogin("http://localhost:8080", msgBox, key).then(async conn=>{
+const seckey = (localStorage.getItem("key") ?? auth.randomKey().sec) as SecKey
+localStorage.setItem("key", seckey)
+const pub = auth.keyFromNsec(seckey).pub
 
+ServerLogin("http://localhost:8080", msgBox, seckey).then(async conn=>{
+  await conn(pub, msgBox.api.putMsg, "hello, self")
 
-  await conn(key.pub, msgBox.api.putMsg, "hello, self")
-
-  const resp = await conn(key.pub, msgBox.api.seeMsgs, key.pub)
+  const resp = await conn(pub, msgBox.api.seeMsgs, pub) as [string,string][]
   console.log(resp)
 
 })

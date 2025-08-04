@@ -6,30 +6,23 @@ export type SecKey = nip19.NSec
 
 
 export type Auth = {
-  keyFromNsec : (s:string) => Key
+  keyFromNsec : (s:SecKey) => Key
   randomKey : () => Key
   checkEvent : (e:Event) => boolean
 }
 
 export const auth: Auth = {
-  keyFromNsec : (env:string) => {
-    const s = secFromString(env)
-    const pub = getPub(s)
+  keyFromNsec : (sec:SecKey) => {
     return {
-      pub,
-      sec : s,
-      sign : (content:string) => signEvent(content, s)
+      pub:getPub(sec),
+      sec,
+      sign : (content:string) => signEvent(content, sec)
     }
   },
 
   randomKey : () => {
     const sec = nip19.nsecEncode(generateSecretKey())
-    const pub = getPub(sec)
-    return {
-      pub,
-      sec,
-      sign : (content:string) => signEvent(content, sec)
-    }
+    return auth.keyFromNsec(sec)
   },
   checkEvent : (e:Event) => verifyEvent(e)
 }
