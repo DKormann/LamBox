@@ -1,11 +1,5 @@
-// helper functions for nostr protocol auth
-
 import { Event, EventTemplate, finalizeEvent, generateSecretKey, getPublicKey, nip19, verifyEvent } from 'nostr-tools';
-import { utils } from 'nostr-tools';
-import * as fs from 'fs';
 
-import {SimplePool} from 'nostr-tools'
-import {nip05} from 'nostr-tools'
 
 export type PubKey = nip19.NPub
 export type SecKey = nip19.NSec

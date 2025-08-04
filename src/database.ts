@@ -56,7 +56,6 @@ export async function acceptEvent(event: Event){
     const response = (request.tag == "publish") ? acceptPublish(request) : (request.tag == "host") ? acceptHost(request) : acceptCall(request)
     return response
   }catch(e){
-    console.log(e)
     throw e
   }
 }
@@ -84,12 +83,16 @@ export async function acceptPublish(request: Request & {tag: "publish"}){
 }
 
 export async function acceptHost(request: Request & {tag: "host"}){
-  const host = db.hosts.get(request.pubkey)!
-  if (!host){
-    const host = new Set<string>()
+  let host = db.hosts.get(request.pubkey)!
+
+  if (host == undefined){
+    host = new Set<string>()
     db.hosts.set(request.pubkey, host)
   }
-  (request.allowed? host.add : host.delete)(request.hash)
+
+
+  if (request.allowed) host.add(request.hash)
+  else host.delete(request.hash)
   return null
 }
 
@@ -120,12 +123,12 @@ export async function acceptCall(request: Request & {tag: "call"}){
   if (!app) return null
   if (! app.api.has(request.lam)) return null
   const lambda = db.lambdas.get(request.lam)
-  
-  const func = new Function("ctx", "self", "other", "arg", "return " + lambda) as APIFunction
-  const self = {pubkey: request.host, store: getStore(request.host)}
-  const other = {pubkey: request.pubkey, store: getStore(request.pubkey)}
 
-  const res = func(app.ctx, self, other, request.argument)
+  const func = new Function("ctx", "self", "other", "arg", "return " + lambda)() as APIFunction
+  const self = {pubkey: request.pubkey, store: getStore(request.pubkey)}
+  const other = {pubkey: request.host, store: getStore(request.host)}
+
+  const res = func(app.ctx, self, other, request.argument)  
   return res ?? null
 
 }

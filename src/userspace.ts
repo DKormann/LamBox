@@ -1,7 +1,7 @@
-import { auth, Key, PubKey } from "./auth"
-// import { setup } from "./client"
-import { SHA256 } from "./database"
-import { cast, DataSchema, ObjectSchema, Serial, StringSchema } from "./dataSchemas"
+import { Key, PubKey } from "./auth"
+import { SHA256, Request } from "./database"
+import { Serial } from "./dataSchemas"
+import { signEvent } from "./auth"
 
 export type DataHandle <T extends Serial>= {
   get: () => T | null
@@ -47,10 +47,16 @@ const {getCtx, api} = str as {getCtx: string, api: Record<string, string>}
   }
 }
 
+  
+
 
 export async function BoxTable(bx:BoxSerial){
   const hash = await SHA256(JSON.stringify(bx))
-  const apiHashes = Object.fromEntries(await Promise.all(Object.entries(bx.api).map(([key, func]) => [key, SHA256(func + hash)]))) as Record<string, string>
+
+  const apiHashes : Record<string, string> = {}
+  for (const [key, func] of Object.entries(bx.api)){
+    apiHashes[key] = await SHA256(func + hash)
+  }
   return {
     hash,
     apiHashes
@@ -58,10 +64,57 @@ export async function BoxTable(bx:BoxSerial){
 }
 
 
-export type Server = {
-  self: Person,
-  request: (pubkey: PubKey, func: (self:Person, other:Person, arg: Serial) => Serial|void, arg: Serial) => Promise<void|Serial>
-}
 
+
+export async function ServerLogin(url:string, box:Box<any>, key:Key) {
+
+  async function sendRequest(request:Request){
+    const event = signEvent(JSON.stringify(request), key.sec)
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(event)
+    })
+    if (!resp.ok) console.error(await resp.text())
+    else return resp.json()
+
+  }
+
+  const bserial = Box2Serial(box)
+  const btable = await BoxTable(bserial)
+  await sendRequest({
+    pubkey: key.pub,
+    tag: "publish",
+    app: bserial,
+  })
+
+  await sendRequest({
+    pubkey: key.pub,
+    tag: "host",
+    hash: btable.hash,
+    allowed: true,
+  })
+
+  return async (target:PubKey, lam:APIFunction, arg:Serial = null) =>{
+    const lamHash = await SHA256(lam.toString() + btable.hash)
+    if (!Object.values(btable.apiHashes).includes(lamHash)){
+      throw new Error("illegal lambda")
+    }
+    const request: Request = {
+      tag: "call",
+      pubkey: key.pub,
+      app: btable.hash,
+      lam: lamHash,
+      host: target,
+      argument: arg
+    }
+    const resp = await sendRequest(request)
+    return resp
+  }
+
+}
 
 
