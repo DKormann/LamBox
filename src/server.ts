@@ -4,8 +4,8 @@ import { acceptEvent } from "./database"
 import { auth, Event } from "./auth";
 import { log } from "console";
 
-const hostname = '127.0.0.1';
-const port = 8080;
+const hostname = '0.0.0.0'
+const port = 80;
 
 
 const server: http.Server = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {

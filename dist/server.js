@@ -39,8 +39,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 var http = require("http");
 var database_1 = require("./database");
 var auth_1 = require("./auth");
-var hostname = '127.0.0.1';
-var port = 8080;
+var hostname = '0.0.0.0';
+var port = 80;
 var server = http.createServer(function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
     var chunks;
     return __generator(this, function (_a) {
