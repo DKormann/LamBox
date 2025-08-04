@@ -32,7 +32,7 @@ localStorage.setItem("key", seckey)
 const pub = auth.keyFromNsec(seckey).pub
 
 
-const serverurl = "http://68.183.213.170:80"
+const serverurl = "https://lamboxserver.duckdns.org"
 
 ServerLogin(serverurl, msgBox, seckey).then(async conn=>{
   await conn(pub, msgBox.api.putMsg, "hello, self")
