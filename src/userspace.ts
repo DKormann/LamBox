@@ -1,16 +1,15 @@
-import { auth, PubKey } from "./auth"
+import { auth, Key, PubKey } from "./auth"
+import { setup } from "./client"
 import { DataSchema, Primitive } from "./dataSchemas"
 
-
-
 export type Store = {
-  get: (key: string) => Primitive
-  set: (key: string, value: Primitive) => void
-  update: (key: string, func: (value: Primitive) => Primitive) => void
+  get: <T extends Primitive>(key: string) => T | null
+  set: <T extends Primitive>(key: string, value: T) => void
+  update: <T extends Primitive> (key: string, func: (value: T| null) => T) => void
 
   getBox: <T extends Primitive>(key: string, type: DataSchema) => T
   setBox: <T extends Primitive>(key: string, value: T, type: DataSchema) => void
-  updateBox: <T extends Primitive>(key: string, func: (value: T) => T, type: DataSchema) => void
+  updateBox: <T extends Primitive>(key: string, func: (value: T| null) => T, type: DataSchema) => void
 }
 
 
@@ -31,7 +30,7 @@ export const newPerson = (): Person => {
       set: (key: string, value: Primitive) => {
         throw new Error("Not implemented") 
       },
-      update: (key: string, func: (value: Primitive) => Primitive) => {
+      update: <T extends Primitive>(key: string, func: (value: T) => T) => {
         throw new Error("Not implemented") 
       },
       getBox: <T extends Primitive>(key: string, type: DataSchema) => {
@@ -45,13 +44,13 @@ export const newPerson = (): Person => {
       }
     },
     secretStore: {
-      get: (key: string) => {
+      get: <T extends Primitive>(key: string) => {
         throw new Error("Not implemented") 
       },
-      set: (key: string, value: Primitive) => {
+      set: <T extends Primitive>(key: string, value: T) => {
         throw new Error("Not implemented") 
       },
-      update: (key: string, func: (value: Primitive) => Primitive) => {
+      update: <T extends Primitive>(key: string, func: (value: T | null) => T) => {
         throw new Error("Not implemented") 
       },
       getBox: <T extends Primitive>(key: string, type: DataSchema) => {
@@ -71,7 +70,16 @@ export type Server <UserSpec extends Object> = {
   request: <Arg extends Primitive, Ret extends Primitive> (pubkey: PubKey,  func:(self:Person, other:Person, arg: Arg) => Ret|void, arg:Arg) => Promise<Ret|void>
 }
 
-export const findServer = <UserSpec extends Object>(url: string, pubkey: PubKey, userSpec: UserSpec): Server<UserSpec>=> {
+export const serverLogin = <UserSpec extends Object>(url: string, key: Key, userSpec: UserSpec): Server<UserSpec>=> {
+
+  const con = setup(url, key);
+
+  Object.entries(userSpec).forEach(([fname, func]) => {
+
+    const code = func.toString().split("(self,me,arg)=>")[1]
+    console.log("code:", code);
+    
+  })
 
   return {
     request: async <Arg extends Primitive, Ret extends Primitive > (pubkey: PubKey, func: (self:Person, other:Person, arg: Arg) => Ret|void, arg: Arg) : Promise<Ret|void> => {

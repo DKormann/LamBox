@@ -1,6 +1,6 @@
-import { PubKey } from "./auth"
+import { auth, PubKey } from "./auth"
 import { ArraySchema, StringSchema, cast, Primitive } from "./dataSchemas"
-import { findServer, newPerson, Person } from "./userspace"
+import { serverLogin, newPerson, Person } from "./userspace"
 
 
 
@@ -15,19 +15,21 @@ const msgSchema = ArraySchema(StringSchema)
 const followListSchema = ArraySchema(StringSchema)
 
 
+
 export const User : UserSpec = {
 
   accept_follow: (self: Person, me: Person) => {
-    self.secretStore.updateBox<string[]>("followers", followers=> [...followers, me.pubkey], followListSchema)
-    me.pubStore.updateBox<string[]>("follows", follows=> [...follows, self.pubkey], followListSchema)
+    self.secretStore.update<string[]>("followers", followers=> [...followers ?? [], me.pubkey])
+    me.pubStore.update<string[]>("follows", follows=> [...follows ?? [], self.pubkey])
   },
   accept_private_message: (self: Person, me:Person,  arg: string) =>{
-    self.secretStore.updateBox<string[]>("messages", msgs => [...msgs, `${me.pubkey}: ${arg}`], msgSchema)
+    self.secretStore.update<string[]>("messages", msgs => [...msgs ?? [], `${me.pubkey}: ${arg}`])
   }
 }
 
-const me = newPerson()
-const server = findServer("http://localhost:8080", me.pubkey, User)
+const token = auth.randomKey()
+
+const server = serverLogin("http://localhost:8080", token, User)
 
 
 function send_message(target: PubKey, message: string){
