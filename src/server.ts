@@ -5,7 +5,7 @@ import { auth, Event } from "./auth";
 import { log } from "console";
 
 const hostname = '0.0.0.0'
-const port = 80;
+const port = 8080;
 
 
 const server: http.Server = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
