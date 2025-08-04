@@ -31,7 +31,10 @@ const seckey = (localStorage.getItem("key") ?? auth.randomKey().sec) as SecKey
 localStorage.setItem("key", seckey)
 const pub = auth.keyFromNsec(seckey).pub
 
-ServerLogin("http://localhost:8080", msgBox, seckey).then(async conn=>{
+
+const serverurl = "http://68.183.213.170:80"
+
+ServerLogin(serverurl, msgBox, seckey).then(async conn=>{
   await conn(pub, msgBox.api.putMsg, "hello, self")
 
   const resp = await conn(pub, msgBox.api.seeMsgs, pub) as [string,string][]
