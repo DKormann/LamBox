@@ -45,72 +45,32 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     return to.concat(ar || Array.prototype.slice.call(from));
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Box2Serial = Box2Serial;
-exports.Serial2Box = Serial2Box;
-exports.BoxTable = BoxTable;
+exports.SHA256 = void 0;
 exports.ServerLogin = ServerLogin;
+exports.Box2Serial = Box2Serial;
 var auth_1 = require("./auth");
-var database_1 = require("./database");
-var auth_2 = require("./auth");
-function Box2Serial(bx) {
-    return {
-        getCtx: bx.getCtx.toString(),
-        api: Object.fromEntries(Object.entries(bx.api).map(function (_a) {
-            var key = _a[0], func = _a[1];
-            return [key, func.toString()];
-        }))
-    };
-}
-function Serial2Box(str) {
-    var _a = str, getCtx = _a.getCtx, api = _a.api;
-    return {
-        getCtx: eval(getCtx),
-        api: Object.fromEntries(Object.entries(api).map(function (_a) {
-            var key = _a[0], func = _a[1];
-            return [key, eval(func)];
-        }))
-    };
-}
-function BoxTable(bx) {
-    return __awaiter(this, void 0, void 0, function () {
-        var hash, apiHashes, _i, _a, _b, key, func, _c, _d;
-        return __generator(this, function (_e) {
-            switch (_e.label) {
-                case 0: return [4 /*yield*/, (0, database_1.SHA256)(JSON.stringify(bx))];
-                case 1:
-                    hash = _e.sent();
-                    apiHashes = {};
-                    _i = 0, _a = Object.entries(bx.api);
-                    _e.label = 2;
-                case 2:
-                    if (!(_i < _a.length)) return [3 /*break*/, 5];
-                    _b = _a[_i], key = _b[0], func = _b[1];
-                    _c = apiHashes;
-                    _d = key;
-                    return [4 /*yield*/, (0, database_1.SHA256)(func + hash)];
-                case 3:
-                    _c[_d] = _e.sent();
-                    _e.label = 4;
-                case 4:
-                    _i++;
-                    return [3 /*break*/, 2];
-                case 5: return [2 /*return*/, {
-                        hash: hash,
-                        apiHashes: apiHashes
-                    }];
-            }
-        });
+var SHA256 = function (data) { return __awaiter(void 0, void 0, void 0, function () {
+    var hash, hashstring;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0: return [4 /*yield*/, crypto.subtle.digest('SHA-256', new TextEncoder().encode(data))];
+            case 1:
+                hash = _a.sent();
+                hashstring = Array.from(new Uint8Array(hash)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+                return [2 /*return*/, hashstring];
+        }
     });
-}
+}); };
+exports.SHA256 = SHA256;
 function ServerLogin(url, box, key) {
     return __awaiter(this, void 0, void 0, function () {
         function sendRequest(request) {
             return __awaiter(this, void 0, void 0, function () {
-                var event, resp, _a, _b;
-                return __generator(this, function (_c) {
-                    switch (_c.label) {
+                var event, resp;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
                         case 0:
-                            event = (0, auth_2.signEvent)(JSON.stringify(request), key);
+                            event = (0, auth_1.signEvent)(JSON.stringify(request), key.sec);
                             return [4 /*yield*/, fetch(url, {
                                     method: "POST",
                                     headers: {
@@ -119,40 +79,34 @@ function ServerLogin(url, box, key) {
                                     body: JSON.stringify(event)
                                 })];
                         case 1:
-                            resp = _c.sent();
-                            if (!!resp.ok) return [3 /*break*/, 3];
-                            _b = (_a = console).error;
-                            return [4 /*yield*/, resp.text()];
-                        case 2:
-                            _b.apply(_a, [_c.sent()]);
-                            return [3 /*break*/, 4];
-                        case 3: return [2 /*return*/, resp.json()];
-                        case 4: return [2 /*return*/];
+                            resp = _a.sent();
+                            if (!resp.ok)
+                                throw new Error("Failed to send request:" + resp.status);
+                            else
+                                return [2 /*return*/, resp.json()];
+                            return [2 /*return*/];
                     }
                 });
             });
         }
-        var pub, bserial, btable;
+        var bserial;
         var _this = this;
         return __generator(this, function (_a) {
             switch (_a.label) {
-                case 0:
-                    pub = auth_1.auth.keyFromNsec(key).pub;
-                    bserial = Box2Serial(box);
-                    return [4 /*yield*/, BoxTable(bserial)];
+                case 0: return [4 /*yield*/, Box2Serial(box)];
                 case 1:
-                    btable = _a.sent();
+                    bserial = _a.sent();
                     return [4 /*yield*/, sendRequest({
-                            pubkey: pub,
+                            pubkey: key.pub,
                             tag: "publish",
                             app: bserial,
                         })];
                 case 2:
                     _a.sent();
                     return [4 /*yield*/, sendRequest({
-                            pubkey: pub,
+                            pubkey: key.pub,
                             tag: "host",
-                            hash: btable.hash,
+                            appHash: bserial.hash,
                             allowed: true,
                         })];
                 case 3:
@@ -163,21 +117,18 @@ function ServerLogin(url, box, key) {
                                 args_1[_i - 2] = arguments[_i];
                             }
                             return __awaiter(_this, __spreadArray([target_1, lam_1], args_1, true), void 0, function (target, lam, arg) {
-                                var lamHash, request, resp;
+                                var lamH, request, resp;
                                 if (arg === void 0) { arg = null; }
                                 return __generator(this, function (_a) {
                                     switch (_a.label) {
-                                        case 0: return [4 /*yield*/, (0, database_1.SHA256)(lam.toString() + btable.hash)];
+                                        case 0: return [4 /*yield*/, lamHash(lam, bserial)];
                                         case 1:
-                                            lamHash = _a.sent();
-                                            if (!Object.values(btable.apiHashes).includes(lamHash)) {
-                                                throw new Error("illegal lambda");
-                                            }
+                                            lamH = _a.sent();
                                             request = {
                                                 tag: "call",
-                                                pubkey: pub,
-                                                app: btable.hash,
-                                                lam: lamHash,
+                                                pubkey: key.pub,
+                                                appHash: bserial.hash,
+                                                lamHash: lamH,
                                                 host: target,
                                                 argument: arg
                                             };
@@ -189,6 +140,69 @@ function ServerLogin(url, box, key) {
                                 });
                             });
                         }];
+            }
+        });
+    });
+}
+function exampleAPI(c) {
+    var friends = c.getTable("friends", []);
+    return {
+        friends: friends
+    };
+}
+function _lamHash(lam, boxHash) {
+    return (0, exports.SHA256)(lam + boxHash);
+}
+function lamHash(lam, box) {
+    return __awaiter(this, void 0, void 0, function () {
+        var lhash;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, _lamHash(lam.toString(), box.hash)];
+                case 1:
+                    lhash = _a.sent();
+                    if (!Object.values(box.apiHashes).includes(lhash))
+                        throw new Error("illegal lambda");
+                    return [2 /*return*/, lhash];
+            }
+        });
+    });
+}
+function Box2Serial(box) {
+    return __awaiter(this, void 0, void 0, function () {
+        var getCtx, api, hash, apiHashes, _i, _a, _b, key, func, _c, _d;
+        return __generator(this, function (_e) {
+            switch (_e.label) {
+                case 0:
+                    getCtx = box.getCtx.toString();
+                    api = Object.fromEntries(Object.entries(box.api).map(function (_a) {
+                        var key = _a[0], func = _a[1];
+                        return [key, func.toString()];
+                    }));
+                    return [4 /*yield*/, (0, exports.SHA256)(JSON.stringify({ getCtx: getCtx, api: api }))];
+                case 1:
+                    hash = _e.sent();
+                    apiHashes = {};
+                    _i = 0, _a = Object.entries(api);
+                    _e.label = 2;
+                case 2:
+                    if (!(_i < _a.length)) return [3 /*break*/, 5];
+                    _b = _a[_i], key = _b[0], func = _b[1];
+                    _c = apiHashes;
+                    _d = key;
+                    return [4 /*yield*/, _lamHash(func.toString(), hash)];
+                case 3:
+                    _c[_d] = _e.sent();
+                    _e.label = 4;
+                case 4:
+                    _i++;
+                    return [3 /*break*/, 2];
+                case 5: return [2 /*return*/, {
+                        getCtx: getCtx,
+                        api: api,
+                        hash: hash,
+                        apiHashes: apiHashes
+                    }];
             }
         });
     });

@@ -1,21 +1,19 @@
-import { PubKey, signEvent,  } from "./auth"
-import { Event, nip19, VerifiedEvent,  } from "nostr-tools"
-import { DataSchema, Serial } from "./dataSchemas"
-import { APIFunction, Box, Box2Serial, BoxSerial} from "./userspace"
+import { PubKey  } from "./auth"
 
-import { Worker, ResourceLimits } from "worker_threads"
+
+import { Event, nip19 } from "nostr-tools"
+import { Serial } from "./dataSchemas"
+import { BoxSerial} from "./userspace"
+import { SHA256, Request } from "./userspace"
+import { Worker } from "worker_threads"
 import { WorkerCall, WorkerMessage } from "./runtime"
 
 
 
+type resultKey = string
+type Lambda = string
 type lamHash = string
 type appHash = string
-type resultKey = string
-
-type Lambda = string
-
-// type StoreItem = Serial
-
 
 type DB = {
   lambdas: Map<lamHash, Lambda>,
@@ -30,23 +28,6 @@ let db: DB = {
   hosts: new Map(),
   store: new Map(),
 }
-
-export type Request = {
-  pubkey: PubKey,
-} & ({
-  tag: "publish",
-  app: BoxSerial,
-} | {
-  tag: "host",
-  hash: appHash,
-  allowed: boolean,
-} | {
-  tag: "call",
-  app: appHash,
-  lam: lamHash,
-  host: PubKey,
-  argument: Serial,
-})
 
 
 
@@ -64,11 +45,6 @@ export async function acceptEvent(event: Event):Promise<string|null>{
   }
 }
 
-export const  SHA256 = async (data: string) => {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data))
-  const hashstring = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
-  return hashstring
-}
 
 export async function acceptPublish(request: Request & {tag: "publish"}){
 
@@ -85,7 +61,9 @@ export async function acceptPublish(request: Request & {tag: "publish"}){
 }
 
 export async function acceptHost(request: Request & {tag: "host"}){
+  
   let host = db.hosts.get(request.pubkey)!
+
 
   if (host == undefined){
     host = new Set<string>()
@@ -93,29 +71,33 @@ export async function acceptHost(request: Request & {tag: "host"}){
   }
 
 
-  if (request.allowed) host.add(request.hash)
-  else host.delete(request.hash)
+  if (request.allowed) host.add(request.appHash)
+  else host.delete(request.appHash)
   return null
 }
 
 
-
 export async function acceptCall(request: Request & {tag: "call"}){
 
-  const host = db.hosts.get(request.host)
-  if (!host || !host.has(request.app)) return null
 
-  const app = db.apps.get(request.app)
-  if (!app) return null
-  if (! app.api.has(request.lam)) return null
-  const lambda = db.lambdas.get(request.lam)
+  const host = db.hosts.get(request.host)
+  if (!host || !host.has(request.appHash)){
+    console.log("host not found", host, request.appHash)
+    return null
+  }
+
+  const app = db.apps.get(request.appHash)
+  if (!app){
+    console.log("app not found")
+    return null
+  } 
+  const lambda = db.lambdas.get(request.lamHash)
   if (!lambda) {
     console.log("lambda not found")
     return null
   }
 
-
-  const worker = new Worker("./worker.js",{
+  const worker = new Worker("./dist/runtime.js",{
     workerData: {},
     resourceLimits: {
       maxOldGenerationSizeMb: 100,
@@ -125,33 +107,41 @@ export async function acceptCall(request: Request & {tag: "call"}){
     }
   } as WorkerOptions)
 
-
-
   const call:WorkerCall = {
     tag:"request",
     getCtx: app.getCtx,
-    lam: request.lam,
+    lam: lambda,
     self: request.pubkey,
     other: request.host,
     arg: request.argument,
   }
 
+  // console.log("call", call);
+
   worker.postMessage(call)
 
 
-  return new Promise<string>((resolve, reject)=>{
+  return new Promise<string|null>((resolve, reject)=>{
+
+
 
     worker.on("message", (message:WorkerMessage)=>{
+
+      
       if (message.tag == "request"){
 
         if (message.person != request.host && message.person != request.pubkey) throw new Error("Unauthorized")
 
         let val:string|undefined = undefined
         if (message.method == "get"){
+          
           val = db.store.get(message.person)?.get(message.key)
         }else if (message.method == "set"){
+          if (!db.store.has(message.person)) db.store.set(message.person, new Map())
           db.store.get(message.person)?.set(message.key, message.body)
         }
+
+
 
         const response:WorkerCall = {
           tag:"response",
@@ -163,10 +153,9 @@ export async function acceptCall(request: Request & {tag: "call"}){
         console.log("error", message.error)
         reject(message.error)
       }else if (message.tag == "ok"){
-        resolve(message.value)
+        console.log("ok", message.value)
+        resolve(message.value??null)
       }
     })
   })
-
-
 }

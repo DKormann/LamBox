@@ -47,13 +47,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SHA256 = void 0;
 exports.acceptEvent = acceptEvent;
 exports.acceptPublish = acceptPublish;
 exports.acceptHost = acceptHost;
 exports.acceptCall = acceptCall;
 var nostr_tools_1 = require("nostr-tools");
-var userspace_1 = require("./userspace");
+var worker_threads_1 = require("worker_threads");
 var db = {
     lambdas: new Map(),
     apps: new Map(),
@@ -78,38 +77,20 @@ function acceptEvent(event) {
         });
     });
 }
-var SHA256 = function (data) { return __awaiter(void 0, void 0, void 0, function () {
-    var hash, hashstring;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
-            case 0: return [4 /*yield*/, crypto.subtle.digest('SHA-256', new TextEncoder().encode(data))];
-            case 1:
-                hash = _a.sent();
-                hashstring = Array.from(new Uint8Array(hash)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
-                return [2 /*return*/, hashstring];
-        }
-    });
-}); };
-exports.SHA256 = SHA256;
 function acceptPublish(request) {
     return __awaiter(this, void 0, void 0, function () {
-        var _a, hash, apiHashes, box, ctx;
+        var _a, hash, apiHashes, getCtx;
         return __generator(this, function (_b) {
-            switch (_b.label) {
-                case 0: return [4 /*yield*/, (0, userspace_1.BoxTable)(request.app)];
-                case 1:
-                    _a = _b.sent(), hash = _a.hash, apiHashes = _a.apiHashes;
-                    box = (0, userspace_1.Serial2Box)(request.app);
-                    ctx = box.getCtx();
-                    if (db.apps.has(hash))
-                        return [2 /*return*/, null];
-                    db.apps.set(hash, { ctx: ctx, api: new Set(Object.values(apiHashes)) });
-                    Object.entries(request.app.api).forEach(function (_a) {
-                        var key = _a[0], value = _a[1];
-                        db.lambdas.set(apiHashes[key], value);
-                    });
-                    return [2 /*return*/, null];
-            }
+            _a = request.app, hash = _a.hash, apiHashes = _a.apiHashes;
+            getCtx = request.app.getCtx;
+            if (db.apps.has(hash))
+                return [2 /*return*/, null];
+            db.apps.set(hash, { getCtx: getCtx, api: new Set(Object.values(apiHashes)) });
+            Object.entries(request.app.api).forEach(function (_a) {
+                var key = _a[0], value = _a[1];
+                db.lambdas.set(apiHashes[key], value);
+            });
+            return [2 /*return*/, null];
         });
     });
 }
@@ -123,49 +104,83 @@ function acceptHost(request) {
                 db.hosts.set(request.pubkey, host);
             }
             if (request.allowed)
-                host.add(request.hash);
+                host.add(request.appHash);
             else
-                host.delete(request.hash);
+                host.delete(request.appHash);
             return [2 /*return*/, null];
         });
     });
 }
-function getStore(app, owner) {
-    var userStore = db.store.get(owner);
-    if (!userStore) {
-        userStore = {
-            public: new Map(),
-            secret: new Map()
-        };
-        db.store.set(owner, userStore);
-    }
-    return function (key, secret) {
-        key = app + ":" + key;
-        return {
-            get: function () { var _a; return (_a = userStore[secret ? "secret" : "public"].get(key)) !== null && _a !== void 0 ? _a : null; },
-            set: function (value) { return userStore[secret ? "secret" : "public"].set(key, value); },
-            update: function (func) { var _a; return userStore[secret ? "secret" : "public"].set(key, func((_a = userStore[secret ? "secret" : "public"].get(key)) !== null && _a !== void 0 ? _a : null)); }
-        };
-    };
-}
 function acceptCall(request) {
     return __awaiter(this, void 0, void 0, function () {
-        var host, app, lambda, func, self, other, res;
+        var host, app, lambda, worker, call;
         return __generator(this, function (_a) {
             host = db.hosts.get(request.host);
-            if (!host || !host.has(request.app))
+            if (!host || !host.has(request.appHash)) {
+                console.log("host not found", host, request.appHash);
                 return [2 /*return*/, null];
-            app = db.apps.get(request.app);
-            if (!app)
+            }
+            app = db.apps.get(request.appHash);
+            if (!app) {
+                console.log("app not found");
                 return [2 /*return*/, null];
-            if (!app.api.has(request.lam))
+            }
+            lambda = db.lambdas.get(request.lamHash);
+            if (!lambda) {
+                console.log("lambda not found");
                 return [2 /*return*/, null];
-            lambda = db.lambdas.get(request.lam);
-            func = new Function("ctx", "self", "other", "arg", "return " + lambda)();
-            self = { pubkey: request.pubkey, store: getStore(request.app, request.pubkey) };
-            other = { pubkey: request.host, store: getStore(request.app, request.host) };
-            res = func(app.ctx, self, other, request.argument);
-            return [2 /*return*/, res !== null && res !== void 0 ? res : null];
+            }
+            worker = new worker_threads_1.Worker("./dist/runtime.js", {
+                workerData: {},
+                resourceLimits: {
+                    maxOldGenerationSizeMb: 100,
+                    maxYoungGenerationSizeMb: 100,
+                    stackSizeMb: 100,
+                    codeRangeSizeMb: 100,
+                }
+            });
+            call = {
+                tag: "request",
+                getCtx: app.getCtx,
+                lam: lambda,
+                self: request.pubkey,
+                other: request.host,
+                arg: request.argument,
+            };
+            // console.log("call", call);
+            worker.postMessage(call);
+            return [2 /*return*/, new Promise(function (resolve, reject) {
+                    worker.on("message", function (message) {
+                        var _a, _b, _c;
+                        if (message.tag == "request") {
+                            if (message.person != request.host && message.person != request.pubkey)
+                                throw new Error("Unauthorized");
+                            var val = undefined;
+                            if (message.method == "get") {
+                                val = (_a = db.store.get(message.person)) === null || _a === void 0 ? void 0 : _a.get(message.key);
+                            }
+                            else if (message.method == "set") {
+                                if (!db.store.has(message.person))
+                                    db.store.set(message.person, new Map());
+                                (_b = db.store.get(message.person)) === null || _b === void 0 ? void 0 : _b.set(message.key, message.body);
+                            }
+                            var response = {
+                                tag: "response",
+                                requestId: message.id,
+                                value: val,
+                            };
+                            worker.postMessage(response);
+                        }
+                        else if (message.tag == "error") {
+                            console.log("error", message.error);
+                            reject(message.error);
+                        }
+                        else if (message.tag == "ok") {
+                            console.log("ok", message.value);
+                            resolve((_c = message.value) !== null && _c !== void 0 ? _c : null);
+                        }
+                    });
+                })];
         });
     });
 }

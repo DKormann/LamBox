@@ -46,7 +46,9 @@ const server: http.Server = http.createServer(async (req: http.IncomingMessage, 
 
       if (auth.checkEvent(event)) {
 
-        const resp = await acceptEvent(event);        
+        const resp = await acceptEvent(event);
+
+        
         const dat = JSON.stringify(resp);
         
         res.write(dat)

@@ -1,7 +1,37 @@
 import { auth, Key, PubKey, SecKey } from "./auth"
-import { SHA256, Request } from "./database"
 import { Serial } from "./dataSchemas"
 import { signEvent } from "./auth"
+
+
+
+
+export const  SHA256 = async (data: string) => {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(data))
+  const hashstring = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
+  return hashstring
+}
+
+
+type lamHash = string
+type appHash = string
+
+
+export type Request = {
+  pubkey: PubKey,
+} & ({
+  tag: "publish",
+  app: BoxSerial,
+} | {
+  tag: "host",
+  appHash: appHash,
+  allowed: boolean,
+} | {
+  tag: "call",
+  appHash: appHash,
+  lamHash: lamHash,
+  host: PubKey,
+  argument: Serial,
+})
 
 
 export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
@@ -16,7 +46,7 @@ export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
       },
       body: JSON.stringify(event)
     })
-    if (!resp.ok) console.error(await resp.text())
+    if (!resp.ok) throw new Error("Failed to send request:"+resp.status)
     else return resp.json()
 
   }
@@ -31,7 +61,7 @@ export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
   await sendRequest({
     pubkey: key.pub,
     tag: "host",
-    hash: bserial.hash,
+    appHash: bserial.hash,
     allowed: true,
   })
 
@@ -40,8 +70,8 @@ export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
     const request: Request = {
       tag: "call",
       pubkey: key.pub,
-      app: bserial.hash,
-      lam: lamH,
+      appHash: bserial.hash,
+      lamHash: lamH,
       host: target,
       argument: arg
     }
@@ -51,10 +81,6 @@ export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
 
 }
 
-
-
-
-// CLEAN REFACTOR:
 
 
 export type PersonalDBHandle = {

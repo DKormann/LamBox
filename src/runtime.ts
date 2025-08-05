@@ -27,7 +27,7 @@ export type WorkerMessage =
   id: number,
   key: string,
   person: PubKey,
-} & ({method: "get"} |{method: "set", body: string}))
+} & ({method: "get"} |{method: "set", body: string|undefined}))
 
 | {
   tag: "ok",
@@ -47,16 +47,16 @@ if (!parentPort) throw new Error("Must run in worker thread")
 const messageQueue = new Map<number, (val:string|undefined)=>void>()
 
 
-parentPort?.on("message", (message:WorkerCall)=>{
-  if (message.tag === "response"){
-    const callback = messageQueue.get(message.requestId)
-    if (callback) callback(message.value)
-    messageQueue.delete(message.requestId)
-  }
-})
+// parentPort?.on("message", (message:WorkerCall)=>{
+//   if (message.tag === "response"){
+//     const callback = messageQueue.get(message.requestId)
+//     if (callback) callback(message.value)
+//     messageQueue.delete(message.requestId)
+//   }
+// })
 
 
-function sendRequest(key:string, person:PubKey, op:{method: "get"} | {method: "set", body: string}){
+function sendRequest(key:string, person:PubKey, op:{method: "get"} | {method: "set", body: string|undefined}){
   requestCount++
   const reqId = requestCount
   parentPort!.postMessage({id: reqId, person, tag: "request", key, ...op})
@@ -71,50 +71,72 @@ function runCode(code:string, arg:Object){
 
   const vm = new VM({
     timeout: 2000,
-    sandbox: workerData,
+    sandbox: arg,
     wasm:false,
     eval:false,
   });
 
+  console.log({arg, code})
   return vm.run(code)
 
 }
 
 
-parentPort.on("message", (message:WorkerCall & {tag: "request"})=>{
+parentPort.on("message", async (message:WorkerCall)=>{
 
-  function mkHandle(person:PubKey) :PersonalDBHandle{
-    return {
-      get: (key:string) => sendRequest(key, person, {method: "get"}),
-      set: async(key:string, value:string|undefined) => {await sendRequest(key, person, {method: "set", body: JSON.stringify(value)})},
+
+  if (message.tag === "response") {
+
+    const callback = messageQueue.get(message.requestId)
+    if (callback) callback(message.value)
+    messageQueue.delete(message.requestId)
+
+  } else if (message.tag === "request"){
+
+    
+    function mkHandle(person:PubKey) :PersonalDBHandle{
+      return {
+        get: (key:string) => sendRequest(key, person, {method: "get"}),
+        set: async(key:string, value:string|undefined) => {await sendRequest(key, person, {method: "set", body: value})},
+      }
     }
-  }
+    
+    function mkRow<T extends Serial>(person:PubKey, key:string, defaultValue:T):DBRow<T>{
+      const handle = mkHandle(person)
+      const get = () => handle.get(key).then(v=>{
+        const res = v ? JSON.parse(v) as T : defaultValue
+        console.log("got",res);
+        return res
+      }
+      )
+      const set = (value:T|undefined) => handle.set(key, JSON.stringify(value))
+      const update = (func:(value:T)=>T|undefined) => get().then(v=>set(func(v)))
+      const del = () => handle.set(key, undefined)
+      return {get, set, update, delete: del}
+    }
+    
+    const defCon:defaultContext = {
+      self: message.self,
+      other: message.other,
+      getTable: <T extends Serial>(key:string, defaultValue:T) => ({
+        ...mkRow(message.self, key, defaultValue),
+        other: mkRow(message.other, key, defaultValue),
+      })
+    }
+    try {
+      
+      const ctx = runCode(`(${message.getCtx})(defCon)`, {defCon})
+      let res = runCode(`(${message.lam})(ctx, arg)`, {ctx:{...defCon,...ctx}, arg: message.arg})
 
-  function mkRow<T extends Serial>(person:PubKey, key:string, defaultValue:T):DBRow<T>{
-    const handle = mkHandle(person)
-    const get = () => handle.get(key).then(v=>v ? JSON.parse(v) as T : defaultValue)
-    const set = (value:T|undefined) => handle.set(key, JSON.stringify(value))
-    const update = (func:(value:T)=>T|undefined) => get().then(v=>set(func(v)))
-    const del = () => handle.set(key, undefined)
-    return {get, set, update, delete: del}
-  }
-
-  const defCon:defaultContext = {
-    self: message.self,
-    other: message.other,
-    getTable: <T extends Serial>(key:string, defaultValue:T) => ({
-      ...mkRow(message.self, key, defaultValue),
-      other: mkRow(message.other, key, defaultValue),
-    })
-  }
-
-  const ctx = runCode(`(${message.getCtx})(defCon)`, {defCon})
-  const res = runCode(`(${message.lam})(ctx, arg)`, {ctx, arg: message.arg})
-
-  try {
-    parentPort!.postMessage({tag: "ok", value: JSON.stringify(res)} as WorkerMessage)
-  } catch (err) {
-    parentPort!.postMessage({tag: "error", error: (err as Error).message} as WorkerMessage)
+      if (res instanceof Promise){
+        res = await res
+      }
+      
+    
+      parentPort!.postMessage({tag: "ok", value: JSON.stringify(res)} as WorkerMessage)
+    } catch (err) {
+      parentPort!.postMessage({tag: "error", error: (err as Error).message} as WorkerMessage)
+    }
   }
 })
 

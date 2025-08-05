@@ -1,7 +1,19 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.signEvent = exports.auth = void 0;
+exports.storedKey = storedKey;
 var nostr_tools_1 = require("nostr-tools");
+function storedKey(location) {
+    if (location === void 0) { location = "token"; }
+    try {
+        return exports.auth.keyFromNsec(localStorage.getItem(location));
+    }
+    catch (_a) {
+        var key = exports.auth.randomKey();
+        localStorage.setItem(location, key.sec);
+        return key;
+    }
+}
 exports.auth = {
     keyFromNsec: function (sec) {
         return {
