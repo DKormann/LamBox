@@ -1,7 +1,10 @@
 import { PubKey, signEvent,  } from "./auth"
 import { Event, nip19, VerifiedEvent,  } from "nostr-tools"
 import { DataSchema, Serial } from "./dataSchemas"
-import { APIFunction, Box, Box2Serial, BoxSerial, BoxTable, Person, Serial2Box, Store } from "./userspace"
+import { APIFunction, Box, Box2Serial, BoxSerial, BoxTable, DataHandle, Person, Store } from "./userspace"
+
+import { Worker, ResourceLimits } from "worker_threads"
+
 
 
 type lamHash = string
@@ -71,8 +74,8 @@ export async function acceptPublish(request: Request & {tag: "publish"}){
 
   const {hash,apiHashes} = await BoxTable(request.app)
 
-  const box = Serial2Box(request.app)
-  const ctx = box.getCtx()
+  // const box = Serial2Box(request.app)
+  const ctx = request.app.getCtx
 
   if (db.apps.has(hash)) return null
   db.apps.set(hash, {ctx, api: new Set(Object.values(apiHashes))})
@@ -106,13 +109,18 @@ function getStore(app: appHash, owner: PubKey): Store{
     }
     db.store.set(owner, userStore)
   }
-  return (key:string, secret: boolean) => {
+  return <T extends Serial>(key:string, secret: boolean, defaultValue:T) => {
     key = app + ":" + key
     return {
-    get: () => userStore[secret ? "secret" : "public"].get(key) ?? null,
-    set: (value: Serial) => userStore[secret ? "secret" : "public"].set(key, value),
-    update: (func: (value: Serial) => Serial) => userStore[secret ? "secret" : "public"].set(key, func(userStore[secret ? "secret" : "public"].get(key) ?? null))
-  }}
+      defaultValue,
+      get: () => userStore[secret ? "secret" : "public"].get(key) ?? defaultValue,
+      update: (func: (value: T) => T) =>{
+        const val = (userStore[secret ? "secret" : "public"].get(key) ?? defaultValue) as T
+        const newVal = func(val)
+        userStore[secret ? "secret" : "public"].set(key, newVal)
+      }
+    } as DataHandle<T>
+  }
 }
 
 
@@ -127,6 +135,7 @@ export async function acceptCall(request: Request & {tag: "call"}){
   const lambda = db.lambdas.get(request.lam)
 
   const func = new Function("ctx", "self", "other", "arg", "return " + lambda)() as APIFunction
+
   const self = {pubkey: request.pubkey, store: getStore(request.app, request.pubkey)}
   const other = {pubkey: request.host, store: getStore(request.app, request.host)}
 
@@ -136,3 +145,57 @@ export async function acceptCall(request: Request & {tag: "call"}){
 }
 
 
+
+function createSandbox(){
+  const url = "./worker.js";
+
+  const w = new Worker(url, {
+    workerData: {},
+    resourceLimits: {
+      maxOldGenerationSizeMb: 100,
+      maxYoungGenerationSizeMb: 100,
+      stackSizeMb: 100,
+      codeRangeSizeMb: 100,
+    }
+  })
+  return w
+}
+
+
+const worker = createSandbox()
+
+let reqid = 0
+
+function runSandbox(code:string){
+  reqid++
+  worker.postMessage({code, reqid})
+  return new Promise((resolve, reject) => {
+
+    const receipt = reqid
+    worker.on("message", (e) => {
+      if (e.reqid != receipt) return
+      if (e.status == "OK") resolve(e.result)
+      else reject(e.error)
+    })
+    worker.on("error", (e) => {
+      reject(e)
+    })
+  })
+}
+
+runSandbox(`
+res = 0;
+res += 1;
+0 ;
+`)
+.then(console.log).catch(console.error)
+
+
+
+runSandbox(`
+res = 0;
+res += 1;
+1 ;
+`)
+.then(console.log).catch(console.error)
+  

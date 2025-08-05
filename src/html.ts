@@ -5,7 +5,7 @@ export type htmlKey = 'innerText'|'onclick'|'children'|'class'|'id'|'contentEdit
 
 
 
-export const htmlElement = (tag:string, text:string, cls:string, args?:Partial<Record<htmlKey, any>>):HTMLElement =>{
+export const htmlElement = (tag:string, text:string, cls?:string = "", args?:Partial<Record<htmlKey, any>>):HTMLElement =>{
 
   const _element = document.createElement(tag)
   _element.innerText = text

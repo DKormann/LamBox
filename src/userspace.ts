@@ -4,13 +4,13 @@ import { Serial } from "./dataSchemas"
 import { signEvent } from "./auth"
 
 export type DataHandle <T extends Serial>= {
-  get: () => T | null
-  set: (value: T) => void
-  update: (func: (value: T| null) => T) => void
+  defaultValue: T
+  get: () => T
+  update: (func: (value: T) => T | null) => void
 }
 
 
-export type Store = (key:string, secret: boolean) => DataHandle<Serial>
+export type Store = <T extends Serial> (key:string, secret: boolean, defaultValue: T) => DataHandle<T>
 
 export type Table<T extends Serial> = (p:Person) => DataHandle<T>
 
@@ -39,13 +39,13 @@ export function Box2Serial(bx:Box<any>):BoxSerial {
   }
 }
 
-export function Serial2Box(str:BoxSerial): Box<any>{
-const {getCtx, api} = str as {getCtx: string, api: Record<string, string>}
-  return {
-    getCtx: eval(getCtx),
-    api: Object.fromEntries(Object.entries(api).map(([key, func]) => [key, eval(func)]))
-  }
-}
+// export function Serial2Box(str:BoxSerial): Box<any>{
+// const {getCtx, api} = str as {getCtx: string, api: Record<string, string>}
+//   return {
+//     getCtx: eval(getCtx),
+//     api: Object.fromEntries(Object.entries(api).map(([key, func]) => [key, eval(func)]))
+//   }
+// }
 
   
 
@@ -67,8 +67,6 @@ export async function BoxTable(bx:BoxSerial){
 
 
 export async function ServerLogin(url:string, box:Box<any>, key:Key) {
-
-
 
   async function sendRequest(request:Request){
     const event = signEvent(JSON.stringify(request), key.sec)
