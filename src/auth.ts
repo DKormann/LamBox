@@ -5,11 +5,26 @@ export type PubKey = nip19.NPub
 export type SecKey = nip19.NSec
 
 
+
+
 export type Auth = {
   keyFromNsec : (s:SecKey) => Key
   randomKey : () => Key
   checkEvent : (e:Event) => boolean
 }
+
+export function storedKey(location:string = "token"){
+
+  try{
+    return auth.keyFromNsec(localStorage.getItem(location) as SecKey)
+  }catch{
+    const key = auth.randomKey()
+    localStorage.setItem(location, key.sec)
+    return key
+  }
+
+}
+
 
 export const auth: Auth = {
   keyFromNsec : (sec:SecKey) => {

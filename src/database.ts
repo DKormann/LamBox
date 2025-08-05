@@ -1,9 +1,10 @@
 import { PubKey, signEvent,  } from "./auth"
 import { Event, nip19, VerifiedEvent,  } from "nostr-tools"
 import { DataSchema, Serial } from "./dataSchemas"
-import { APIFunction, Box, Box2Serial, BoxSerial, BoxTable, DataHandle, Person, Store } from "./userspace"
+import { APIFunction, Box, Box2Serial, BoxSerial} from "./userspace"
 
 import { Worker, ResourceLimits } from "worker_threads"
+import { WorkerCall, WorkerMessage } from "./runtime"
 
 
 
@@ -13,14 +14,14 @@ type resultKey = string
 
 type Lambda = string
 
-type StoreItem = Serial
+// type StoreItem = Serial
 
 
 type DB = {
   lambdas: Map<lamHash, Lambda>,
-  apps: Map<appHash, {ctx:any, api:Set<lamHash>}>,
+  apps: Map<appHash, {getCtx:string, api:Set<lamHash>}>,
   hosts: Map<PubKey, Set<appHash>>,
-  store: Map<PubKey, {public: Map<resultKey, StoreItem>, secret: Map<resultKey, StoreItem>}>
+  store: Map<PubKey, Map<resultKey, string>>
 }
 
 let db: DB = {
@@ -50,7 +51,7 @@ export type Request = {
 
 
 
-export async function acceptEvent(event: Event){
+export async function acceptEvent(event: Event):Promise<string|null>{
 
   const pubkey = nip19.npubEncode(event.pubkey)
   const content = event.content
@@ -72,13 +73,11 @@ export const  SHA256 = async (data: string) => {
 export async function acceptPublish(request: Request & {tag: "publish"}){
 
 
-  const {hash,apiHashes} = await BoxTable(request.app)
-
-  // const box = Serial2Box(request.app)
-  const ctx = request.app.getCtx
+  const {hash,apiHashes} = request.app
+  const getCtx = request.app.getCtx
 
   if (db.apps.has(hash)) return null
-  db.apps.set(hash, {ctx, api: new Set(Object.values(apiHashes))})
+  db.apps.set(hash, {getCtx, api: new Set(Object.values(apiHashes))})
   Object.entries(request.app.api).forEach(([key, value])=>{
     db.lambdas.set(apiHashes[key], value)
   })
@@ -100,29 +99,6 @@ export async function acceptHost(request: Request & {tag: "host"}){
 }
 
 
-function getStore(app: appHash, owner: PubKey): Store{
-  let userStore = db.store.get(owner)
-  if (!userStore){
-    userStore = {
-      public: new Map(),
-      secret: new Map()
-    }
-    db.store.set(owner, userStore)
-  }
-  return <T extends Serial>(key:string, secret: boolean, defaultValue:T) => {
-    key = app + ":" + key
-    return {
-      defaultValue,
-      get: () => userStore[secret ? "secret" : "public"].get(key) ?? defaultValue,
-      update: (func: (value: T) => T) =>{
-        const val = (userStore[secret ? "secret" : "public"].get(key) ?? defaultValue) as T
-        const newVal = func(val)
-        userStore[secret ? "secret" : "public"].set(key, newVal)
-      }
-    } as DataHandle<T>
-  }
-}
-
 
 export async function acceptCall(request: Request & {tag: "call"}){
 
@@ -133,23 +109,13 @@ export async function acceptCall(request: Request & {tag: "call"}){
   if (!app) return null
   if (! app.api.has(request.lam)) return null
   const lambda = db.lambdas.get(request.lam)
-
-  const func = new Function("ctx", "self", "other", "arg", "return " + lambda)() as APIFunction
-
-  const self = {pubkey: request.pubkey, store: getStore(request.app, request.pubkey)}
-  const other = {pubkey: request.host, store: getStore(request.app, request.host)}
-
-  const res = func(app.ctx, self, other, request.argument)  
-  return res ?? null
-
-}
+  if (!lambda) {
+    console.log("lambda not found")
+    return null
+  }
 
 
-
-function createSandbox(){
-  const url = "./worker.js";
-
-  const w = new Worker(url, {
+  const worker = new Worker("./worker.js",{
     workerData: {},
     resourceLimits: {
       maxOldGenerationSizeMb: 100,
@@ -157,45 +123,50 @@ function createSandbox(){
       stackSizeMb: 100,
       codeRangeSizeMb: 100,
     }
-  })
-  return w
-}
+  } as WorkerOptions)
 
 
-const worker = createSandbox()
 
-let reqid = 0
+  const call:WorkerCall = {
+    tag:"request",
+    getCtx: app.getCtx,
+    lam: request.lam,
+    self: request.pubkey,
+    other: request.host,
+    arg: request.argument,
+  }
 
-function runSandbox(code:string){
-  reqid++
-  worker.postMessage({code, reqid})
-  return new Promise((resolve, reject) => {
+  worker.postMessage(call)
 
-    const receipt = reqid
-    worker.on("message", (e) => {
-      if (e.reqid != receipt) return
-      if (e.status == "OK") resolve(e.result)
-      else reject(e.error)
+
+  return new Promise<string>((resolve, reject)=>{
+
+    worker.on("message", (message:WorkerMessage)=>{
+      if (message.tag == "request"){
+
+        if (message.person != request.host && message.person != request.pubkey) throw new Error("Unauthorized")
+
+        let val:string|undefined = undefined
+        if (message.method == "get"){
+          val = db.store.get(message.person)?.get(message.key)
+        }else if (message.method == "set"){
+          db.store.get(message.person)?.set(message.key, message.body)
+        }
+
+        const response:WorkerCall = {
+          tag:"response",
+          requestId: message.id,
+          value: val,
+        }
+        worker.postMessage(response)
+      }else if (message.tag == "error"){
+        console.log("error", message.error)
+        reject(message.error)
+      }else if (message.tag == "ok"){
+        resolve(message.value)
+      }
     })
-    worker.on("error", (e) => {
-      reject(e)
-    })
   })
+
+
 }
-
-runSandbox(`
-res = 0;
-res += 1;
-0 ;
-`)
-.then(console.log).catch(console.error)
-
-
-
-runSandbox(`
-res = 0;
-res += 1;
-1 ;
-`)
-.then(console.log).catch(console.error)
-  

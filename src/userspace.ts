@@ -3,70 +3,8 @@ import { SHA256, Request } from "./database"
 import { Serial } from "./dataSchemas"
 import { signEvent } from "./auth"
 
-export type DataHandle <T extends Serial>= {
-  defaultValue: T
-  get: () => T
-  update: (func: (value: T) => T | null) => void
-}
 
-
-export type Store = <T extends Serial> (key:string, secret: boolean, defaultValue: T) => DataHandle<T>
-
-export type Table<T extends Serial> = (p:Person) => DataHandle<T>
-
-export type Person = {
-  pubkey: PubKey,
-  store: Store
-}
-
-
-export type APIFunction = (ctx: any, self:Person, other:Person, arg:Serial) => void | Serial
-
-export type Box<Ctx> = {
-  getCtx : () => Ctx
-  api: {
-    [key: string]: APIFunction
-  }
-}
-
-export type BoxSerial = { getCtx:string, api:Record<string, string>}
-
-
-export function Box2Serial(bx:Box<any>):BoxSerial {
-  return {
-    getCtx: bx.getCtx.toString(),
-    api: Object.fromEntries(Object.entries(bx.api).map(([key, func]) => [key, func.toString()]))
-  }
-}
-
-// export function Serial2Box(str:BoxSerial): Box<any>{
-// const {getCtx, api} = str as {getCtx: string, api: Record<string, string>}
-//   return {
-//     getCtx: eval(getCtx),
-//     api: Object.fromEntries(Object.entries(api).map(([key, func]) => [key, eval(func)]))
-//   }
-// }
-
-  
-
-
-export async function BoxTable(bx:BoxSerial){
-  const hash = await SHA256(JSON.stringify(bx))
-
-  const apiHashes : Record<string, string> = {}
-  for (const [key, func] of Object.entries(bx.api)){
-    apiHashes[key] = await SHA256(func + hash)
-  }
-  return {
-    hash,
-    apiHashes
-  }
-}
-
-
-
-
-export async function ServerLogin(url:string, box:Box<any>, key:Key) {
+export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
 
   async function sendRequest(request:Request){
     const event = signEvent(JSON.stringify(request), key.sec)
@@ -83,8 +21,7 @@ export async function ServerLogin(url:string, box:Box<any>, key:Key) {
 
   }
 
-  const bserial = Box2Serial(box)
-  const btable = await BoxTable(bserial)
+  const bserial = await Box2Serial(box)
   await sendRequest({
     pubkey: key.pub,
     tag: "publish",
@@ -94,20 +31,17 @@ export async function ServerLogin(url:string, box:Box<any>, key:Key) {
   await sendRequest({
     pubkey: key.pub,
     tag: "host",
-    hash: btable.hash,
+    hash: bserial.hash,
     allowed: true,
   })
 
-  return async (target:PubKey, lam:APIFunction, arg:Serial = null) =>{
-    const lamHash = await SHA256(lam.toString() + btable.hash)
-    if (!Object.values(btable.apiHashes).includes(lamHash)){
-      throw new Error("illegal lambda")
-    }
+  return async (target:PubKey, lam:APIFunction<C>, arg:Serial = null) =>{
+    const lamH = await lamHash(lam, bserial)
     const request: Request = {
       tag: "call",
       pubkey: key.pub,
-      app: btable.hash,
-      lam: lamHash,
+      app: bserial.hash,
+      lam: lamH,
       host: target,
       argument: arg
     }
@@ -115,6 +49,85 @@ export async function ServerLogin(url:string, box:Box<any>, key:Key) {
     return resp
   }
 
+}
+
+
+
+
+// CLEAN REFACTOR:
+
+
+export type PersonalDBHandle = {
+  get: (key:string) => Promise<string|undefined>,
+  set: (key:string, value: string|undefined) => Promise<void>,
+}
+
+export type DBRow<T extends Serial> = {
+  get: () => Promise<T>,
+  set: (value: T|undefined) => Promise<void>,
+  update: (func: (value: T) => T|undefined) => Promise<void>,
+  delete: () => Promise<void>
+}
+
+export type DBTable <T extends Serial> = DBRow<T> & {
+  other: DBRow<T>,
+}
+
+export type defaultContext = {
+  self: PubKey,
+  other: PubKey,
+  getTable: <T extends Serial>(key:string, defaultValue:T) => DBTable<T>
+}
+
+function exampleAPI (c:defaultContext){
+  let friends = c.getTable("friends", [] as PubKey[])
+
+  return {
+    friends
+  }
+  
+}
+
+export type APIFunction<C> = (ctx:defaultContext & C, arg:Serial) => Promise<void | Serial>
+
+export type Box<C> = {
+  getCtx : (c:defaultContext) => C
+  api: { [key: string]: APIFunction <C> }
+}
+
+export type BoxSerial = {
+  getCtx: string,
+  api: Record<string, string>
+  hash: string
+  apiHashes: Record<string, string>
+}
+
+
+function _lamHash (lam:string, boxHash:string) {
+  return SHA256(lam + boxHash)
+}
+
+async function lamHash <C>(lam:APIFunction<C>, box:BoxSerial){
+  const lhash = await _lamHash(lam.toString(), box.hash)
+  if (!Object.values(box.apiHashes).includes(lhash)) throw new Error("illegal lambda")
+  return lhash
+}
+
+
+export async function Box2Serial(box:Box<any>):Promise<BoxSerial> {
+  const getCtx = box.getCtx.toString()
+  const api = Object.fromEntries(Object.entries(box.api).map(([key, func]) => [key, func.toString()]))
+  const hash = await SHA256(JSON.stringify({getCtx, api}))
+  const apiHashes : Record<string, string> = {}
+  for (const [key, func] of Object.entries(api)){
+    apiHashes[key] = await _lamHash(func.toString(), hash)
+  }
+  return {
+    getCtx,
+    api,
+    hash,
+    apiHashes
+  }
 }
 
 

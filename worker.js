@@ -9,12 +9,6 @@ if (!parentPort) throw new Error('Must run in worker thread');
 let running = false
 const msgqueue = []
 
-const vm = new VM({
-  sandbox: {},
-  timeout: 2000,
-  preventEscape: true
-});
-
 parentPort.on("message", (message)=>{  
   if (running) {
     msgqueue.push(message)
@@ -26,6 +20,14 @@ parentPort.on("message", (message)=>{
 function runCode(message){
   running = true
   try {
+
+
+    const vm = new VM({
+      sandbox: message.args,
+      timeout: 2000,
+      preventEscape: true
+    });
+    vm.run(message.code)
     const result = vm.run(message.code);
     parentPort.postMessage({status:"OK", result, reqid: message.reqid});
   } catch (err) {
