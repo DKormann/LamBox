@@ -67,18 +67,25 @@ const key = storedKey();
   })
 
   ServerLogin(serverurl, msgBox, key).then(async (con) => {
-    body.appendChild(htmlElement("h1", "Logged in"));
+    const header = htmlElement("h1", "Logged in as ")
+    body.appendChild(header);
+    const usernameButton = htmlElement("button", "", "",)
+    header.appendChild(usernameButton);
 
-    // body.appendChild(htmlElement("button", "active users", "", {
-      
-    // }))
+
 
     const chat_partner = new Writable<PubKey> (bob.pub)
+    const myname = new Writable<string>("anonynmous");
 
+    con(key.pub, msgBox.api.getUsername).then((username) => {
+      myname.set(username);
+    })
+
+    myname.subscribe((name) => {
+      usernameButton.innerHTML = name;
+    });
 
     const usernameTable = new Map<PubKey, string>();
-
-
 
     const getUsername = async (p: PubKey) => {
       if (usernameTable.has(p)) return usernameTable.get(p);
@@ -86,6 +93,8 @@ const key = storedKey();
       usernameTable.set(p, username);
       return username;
     };
+
+
 
 
     const partnerpicker = htmlElement("button", "chatting with", "", {
@@ -144,8 +153,6 @@ const key = storedKey();
           );
         }
       });
-
-    await con(key.pub, msgBox.api.setUsername, "user0");
 
     // Define a helper that sends the current input message
     async function sendMessage() {

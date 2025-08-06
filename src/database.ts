@@ -154,8 +154,10 @@ export async function acceptCall(request: Request & {tag: "call"}){
       }else if (message.tag == "error"){
         console.error("error", message.error)
         reject(message.error)
+        worker.terminate()
       }else if (message.tag == "ok"){
         resolve(message.value??null)
+        worker.terminate()
       }
     })
   })

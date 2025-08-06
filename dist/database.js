@@ -185,9 +185,11 @@ function acceptCall(request) {
                         else if (message.tag == "error") {
                             console.error("error", message.error);
                             reject(message.error);
+                            worker.terminate();
                         }
                         else if (message.tag == "ok") {
                             resolve((_b = message.value) !== null && _b !== void 0 ? _b : null);
+                            worker.terminate();
                         }
                     });
                 })];
