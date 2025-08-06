@@ -24,6 +24,12 @@ const server: http.Server = http.createServer(async (req: http.IncomingMessage, 
     return;
   }
 
+  if (req.method === 'GET') {
+    res.statusCode = 200;
+    res.end("Lambox server is running");
+    return;
+  }
+
   if (req.method !== 'POST') {
     res.statusCode = 405;
     res.end("method not allowed");

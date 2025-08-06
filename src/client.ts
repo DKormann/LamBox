@@ -57,6 +57,7 @@ export const msgBox: Box<msgDB> = {
 };
 let serverurl = "https://lamboxserver.duckdns.org";
 serverurl = "http://localhost:8080";
+serverurl = "https://lambox.chickenkiller.com/"
 
 const key = storedKey();
 

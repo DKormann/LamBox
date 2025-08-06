@@ -55,6 +55,11 @@ var server = http.createServer(function (req, res) { return __awaiter(void 0, vo
             res.end();
             return [2 /*return*/];
         }
+        if (req.method === 'GET') {
+            res.statusCode = 200;
+            res.end("Lambox server is running");
+            return [2 /*return*/];
+        }
         if (req.method !== 'POST') {
             res.statusCode = 405;
             res.end("method not allowed");
