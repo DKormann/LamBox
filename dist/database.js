@@ -147,11 +147,10 @@ function acceptCall(request) {
                 other: request.host,
                 arg: request.argument,
             };
-            // console.log("call", call);
             worker.postMessage(call);
             return [2 /*return*/, new Promise(function (resolve, reject) {
                     worker.on("message", function (message) {
-                        var _a, _b, _c;
+                        var _a, _b;
                         if (message.tag == "request") {
                             if (message.person != request.host && message.person != request.pubkey)
                                 throw new Error("Unauthorized");
@@ -160,9 +159,17 @@ function acceptCall(request) {
                                 val = (_a = db.store.get(message.person)) === null || _a === void 0 ? void 0 : _a.get(message.key);
                             }
                             else if (message.method == "set") {
-                                if (!db.store.has(message.person))
-                                    db.store.set(message.person, new Map());
-                                (_b = db.store.get(message.person)) === null || _b === void 0 ? void 0 : _b.set(message.key, message.body);
+                                var pstore = db.store.get(message.person);
+                                if (!pstore) {
+                                    pstore = new Map();
+                                    db.store.set(message.person, pstore);
+                                }
+                                if (message.body == undefined) {
+                                    pstore.delete(message.key);
+                                }
+                                else {
+                                    pstore.set(message.key, message.body);
+                                }
                             }
                             var response = {
                                 tag: "response",
@@ -177,7 +184,7 @@ function acceptCall(request) {
                         }
                         else if (message.tag == "ok") {
                             console.log("ok", message.value);
-                            resolve((_c = message.value) !== null && _c !== void 0 ? _c : null);
+                            resolve((_b = message.value) !== null && _b !== void 0 ? _b : null);
                         }
                     });
                 })];

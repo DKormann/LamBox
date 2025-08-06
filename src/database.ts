@@ -1,10 +1,6 @@
 import { PubKey  } from "./auth"
-
-
 import { Event, nip19 } from "nostr-tools"
-import { Serial } from "./dataSchemas"
-import { BoxSerial} from "./userspace"
-import { SHA256, Request } from "./userspace"
+import { Request } from "./userspace"
 import { Worker } from "worker_threads"
 import { WorkerCall, WorkerMessage } from "./runtime"
 
@@ -116,10 +112,7 @@ export async function acceptCall(request: Request & {tag: "call"}){
     arg: request.argument,
   }
 
-  // console.log("call", call);
-
   worker.postMessage(call)
-
 
   return new Promise<string|null>((resolve, reject)=>{
 
@@ -137,8 +130,16 @@ export async function acceptCall(request: Request & {tag: "call"}){
           
           val = db.store.get(message.person)?.get(message.key)
         }else if (message.method == "set"){
-          if (!db.store.has(message.person)) db.store.set(message.person, new Map())
-          db.store.get(message.person)?.set(message.key, message.body)
+          let pstore = db.store.get(message.person)
+          if (!pstore){
+            pstore = new Map()
+            db.store.set(message.person, pstore)
+          }
+          if (message.body == undefined){
+            pstore.delete(message.key)
+          }else{
+            pstore.set(message.key, message.body)
+          }
         }
 
 

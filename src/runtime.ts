@@ -47,15 +47,6 @@ if (!parentPort) throw new Error("Must run in worker thread")
 const messageQueue = new Map<number, (val:string|undefined)=>void>()
 
 
-// parentPort?.on("message", (message:WorkerCall)=>{
-//   if (message.tag === "response"){
-//     const callback = messageQueue.get(message.requestId)
-//     if (callback) callback(message.value)
-//     messageQueue.delete(message.requestId)
-//   }
-// })
-
-
 function sendRequest(key:string, person:PubKey, op:{method: "get"} | {method: "set", body: string|undefined}){
   requestCount++
   const reqId = requestCount
