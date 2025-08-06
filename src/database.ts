@@ -57,6 +57,8 @@ export async function acceptPublish(request: Request & {tag: "publish"}){
 }
 
 export async function acceptHost(request: Request & {tag: "host"}){
+  console.log("accepting host", request);
+  
   
   let host = db.hosts.get(request.pubkey)!
 
@@ -78,7 +80,7 @@ export async function acceptCall(request: Request & {tag: "call"}){
 
   const host = db.hosts.get(request.host)
   if (!host || !host.has(request.appHash)){
-    console.log("host not found", host, request.appHash)
+    console.log("host not found", request.host, host, request.appHash)
     return null
   }
 
@@ -116,19 +118,18 @@ export async function acceptCall(request: Request & {tag: "call"}){
 
   return new Promise<string|null>((resolve, reject)=>{
 
-
-
     worker.on("message", (message:WorkerMessage)=>{
-
       
       if (message.tag == "request"){
 
         if (message.person != request.host && message.person != request.pubkey) throw new Error("Unauthorized")
-
         let val:string|undefined = undefined
+
+        message.key = message.key + "_" + request.appHash
         if (message.method == "get"){
-          
           val = db.store.get(message.person)?.get(message.key)
+          console.log("got val: ",val);
+          
         }else if (message.method == "set"){
           let pstore = db.store.get(message.person)
           if (!pstore){
@@ -138,11 +139,11 @@ export async function acceptCall(request: Request & {tag: "call"}){
           if (message.body == undefined){
             pstore.delete(message.key)
           }else{
+            console.log("setting val: ",message.body);
+            
             pstore.set(message.key, message.body)
           }
         }
-
-
 
         const response:WorkerCall = {
           tag:"response",
@@ -151,10 +152,9 @@ export async function acceptCall(request: Request & {tag: "call"}){
         }
         worker.postMessage(response)
       }else if (message.tag == "error"){
-        console.log("error", message.error)
+        console.error("error", message.error)
         reject(message.error)
       }else if (message.tag == "ok"){
-        console.log("ok", message.value)
         resolve(message.value??null)
       }
     })

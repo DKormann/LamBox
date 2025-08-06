@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InterSchema = exports.UnionSchema = exports.ObjectSchema = exports.ItemSchema = exports.ArraySchema = exports.NullSchema = exports.BooleanSchema = exports.NumberSchema = exports.StringSchema = exports.AnySchema = exports.checkType = void 0;
+exports.validate = validate;
 exports.cast = cast;
 var checkType = function (value, type) {
     if (type === "any")
@@ -52,6 +53,18 @@ var UnionSchema = function (A, B) { return ({ tag: "union", A: A, B: B }); };
 exports.UnionSchema = UnionSchema;
 var InterSchema = function (A, B) { return ({ tag: "inter", A: A, B: B }); };
 exports.InterSchema = InterSchema;
+function validate(value) {
+    if (["string", "number", "boolean", "null"].includes(typeof value))
+        return true;
+    if (Array.isArray(value))
+        return value.every(validate);
+    if (typeof value == "object")
+        return Object.entries(value).every(function (_a) {
+            var key = _a[0], value = _a[1];
+            return (typeof key == "string") && validate(value);
+        });
+    return false;
+}
 function cast(value, type) {
     if ((0, exports.checkType)(value, type))
         return value;

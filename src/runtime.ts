@@ -2,7 +2,7 @@ import { parentPort, workerData } from 'worker_threads';
 import { VM, VMOptions } from 'vm2';
 import { PubKey } from './auth';
 import { defaultContext, Box, APIFunction, DBTable, PersonalDBHandle, DBRow } from './userspace';
-import { Serial } from './dataSchemas';
+import { cast, Serial, validate } from './dataSchemas';
 
 export type WorkerCall = {
   tag: "request",
@@ -24,7 +24,6 @@ export type WorkerMessage =
   key: string,
   person: PubKey,
 } & ({method: "get"} |{method: "set", body: string|undefined}))
-
 | {
   tag: "ok",
   callid: number,
@@ -64,11 +63,12 @@ function runCode(code: string, sandbox: Object) {
     wasm: false,
     eval: false,
     allowAsync: true,
-    fixAsync: true,
+    // fixAsync: true,
     compiler: "javascript",
   });
 
-  console.log({ sandbox, code });
+  console.log("RUNNING:", code, sandbox)
+
   return vm.run(code);
 }
 
@@ -120,7 +120,6 @@ function mkRow<T extends Serial>(person: PubKey, key: string, defaultValue: T): 
   const get = () => handle.get(key).then(v => {
     try {
       const res = v ? JSON.parse(v) as T : defaultValue;
-      console.log("got", res);
       return res;
     } catch (e) {
       throw new Error('Invalid JSON in DB value');
@@ -159,12 +158,12 @@ parentPort.on("message", async (message: WorkerCall) => {
   } else if (message.tag === "request") {
 
     if (typeof message.getCtx !== 'string' || typeof message.lam !== 'string' ||
-        typeof message.self !== 'string' || typeof message.other !== 'string' ||
-        (message.arg !== null && typeof message.arg !== 'object')) {
+        typeof message.self !== 'string' || typeof message.other !== 'string'
+      ) {
+      console.log(message)
       parentPort!.postMessage({ tag: "error", error: "Invalid input types" } as WorkerMessage);
       return;
     }
-
 
     const defCon: defaultContext = {
       self: message.self,
@@ -195,9 +194,14 @@ parentPort.on("message", async (message: WorkerCall) => {
         let sandbox = Object(null)
         sandbox.defCon = frozenDefCon
         const ctx = runCode(`(${message.getCtx})(defCon)`, sandbox);
-        sandbox.ctx = ctx
-        sandbox.arg = message.arg
-        let res = runCode(`(${message.lam})(ctx, arg)`, sandbox);
+        let sandbox2 = Object(null)
+        sandbox2.ctx = ctx
+        sandbox2.ctx.self = message.self
+        sandbox2.ctx.other = message.other
+        sandbox2.ctx.getTable = defCon.getTable
+        sandbox2.arg = message.arg
+
+        let res = runCode(`(${message.lam})(ctx, arg)`, sandbox2);
 
         if (res instanceof Promise) res = await res;
         JSON.stringify(res);

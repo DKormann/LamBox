@@ -98,6 +98,7 @@ function acceptHost(request) {
     return __awaiter(this, void 0, void 0, function () {
         var host;
         return __generator(this, function (_a) {
+            console.log("accepting host", request);
             host = db.hosts.get(request.pubkey);
             if (host == undefined) {
                 host = new Set();
@@ -117,7 +118,7 @@ function acceptCall(request) {
         return __generator(this, function (_a) {
             host = db.hosts.get(request.host);
             if (!host || !host.has(request.appHash)) {
-                console.log("host not found", host, request.appHash);
+                console.log("host not found", request.host, host, request.appHash);
                 return [2 /*return*/, null];
             }
             app = db.apps.get(request.appHash);
@@ -155,8 +156,10 @@ function acceptCall(request) {
                             if (message.person != request.host && message.person != request.pubkey)
                                 throw new Error("Unauthorized");
                             var val = undefined;
+                            message.key = message.key + "_" + request.appHash;
                             if (message.method == "get") {
                                 val = (_a = db.store.get(message.person)) === null || _a === void 0 ? void 0 : _a.get(message.key);
+                                console.log("got val: ", val);
                             }
                             else if (message.method == "set") {
                                 var pstore = db.store.get(message.person);
@@ -168,6 +171,7 @@ function acceptCall(request) {
                                     pstore.delete(message.key);
                                 }
                                 else {
+                                    console.log("setting val: ", message.body);
                                     pstore.set(message.key, message.body);
                                 }
                             }
@@ -179,11 +183,10 @@ function acceptCall(request) {
                             worker.postMessage(response);
                         }
                         else if (message.tag == "error") {
-                            console.log("error", message.error);
+                            console.error("error", message.error);
                             reject(message.error);
                         }
                         else if (message.tag == "ok") {
-                            console.log("ok", message.value);
                             resolve((_b = message.value) !== null && _b !== void 0 ? _b : null);
                         }
                     });

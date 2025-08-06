@@ -66,9 +66,9 @@ function ServerLogin(url, box, key) {
     return __awaiter(this, void 0, void 0, function () {
         function sendRequest(request) {
             return __awaiter(this, void 0, void 0, function () {
-                var event, resp;
-                return __generator(this, function (_a) {
-                    switch (_a.label) {
+                var event, resp, _a, _b;
+                return __generator(this, function (_c) {
+                    switch (_c.label) {
                         case 0:
                             event = (0, auth_1.signEvent)(JSON.stringify(request), key.sec);
                             return [4 /*yield*/, fetch(url, {
@@ -79,12 +79,13 @@ function ServerLogin(url, box, key) {
                                     body: JSON.stringify(event)
                                 })];
                         case 1:
-                            resp = _a.sent();
-                            if (!resp.ok)
-                                throw new Error("Failed to send request:" + resp.status);
-                            else
-                                return [2 /*return*/, resp.json()];
-                            return [2 /*return*/];
+                            resp = _c.sent();
+                            if (!!resp.ok) return [3 /*break*/, 2];
+                            throw new Error("Failed to send request:" + resp.status);
+                        case 2:
+                            _b = (_a = JSON).parse;
+                            return [4 /*yield*/, resp.json()];
+                        case 3: return [2 /*return*/, _b.apply(_a, [_c.sent()])];
                     }
                 });
             });
@@ -124,6 +125,8 @@ function ServerLogin(url, box, key) {
                                         case 0: return [4 /*yield*/, lamHash(lam, bserial)];
                                         case 1:
                                             lamH = _a.sent();
+                                            console.log("lam:", lam);
+                                            console.log("lamhash:", lamH);
                                             request = {
                                                 tag: "call",
                                                 pubkey: key.pub,

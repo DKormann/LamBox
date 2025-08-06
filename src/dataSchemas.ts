@@ -43,6 +43,12 @@ export const ObjectSchema = (obj: Record<string, DataSchema>):DataSchema => {
 export const UnionSchema = (A: DataSchema, B: DataSchema):DataSchema => ({tag: "union", A, B})
 export const InterSchema = (A: DataSchema, B: DataSchema):DataSchema => ({tag: "inter", A, B})
 
+export function validate(value:Serial): boolean {
+  if (["string", "number", "boolean", "null"].includes(typeof value)) return true
+  if (Array.isArray(value)) return value.every(validate)
+  if (typeof value == "object") return Object.entries(value as Object).every(([key, value]) => (typeof key == "string") && validate(value))
+  return false
+}
 
 export function cast(value: Serial, type: DataSchema): Serial {
   if (checkType(value, type)) return value

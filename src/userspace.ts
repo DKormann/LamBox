@@ -47,7 +47,7 @@ export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
       body: JSON.stringify(event)
     })
     if (!resp.ok) throw new Error("Failed to send request:"+resp.status)
-    else return resp.json()
+    else return JSON.parse(await resp.json())
 
   }
 
@@ -67,6 +67,7 @@ export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
 
   return async (target:PubKey, lam:APIFunction<C>, arg:Serial = null) =>{
     const lamH = await lamHash(lam, bserial)
+
     const request: Request = {
       tag: "call",
       pubkey: key.pub,

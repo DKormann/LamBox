@@ -52,94 +52,201 @@ var vm2_1 = require("vm2");
 if (!worker_threads_1.parentPort)
     throw new Error("Must run in worker thread");
 var messageQueue = new Map();
-// parentPort?.on("message", (message:WorkerCall)=>{
-//   if (message.tag === "response"){
-//     const callback = messageQueue.get(message.requestId)
-//     if (callback) callback(message.value)
-//     messageQueue.delete(message.requestId)
-//   }
-// })
 function sendRequest(key, person, op) {
     requestCount++;
     var reqId = requestCount;
     worker_threads_1.parentPort.postMessage(__assign({ id: reqId, person: person, tag: "request", key: key }, op));
     return new Promise(function (resolve, reject) {
-        messageQueue.set(reqId, resolve);
+        messageQueue.set(reqId, function (result) {
+            if ('error' in result) {
+                reject(new Error(result.error));
+            }
+            else {
+                resolve(result.value);
+            }
+        });
     });
 }
 var requestCount = 0;
-function runCode(code, arg) {
+// Helper to run code in VM with enhanced security
+function runCode(code, sandbox) {
     var vm = new vm2_1.VM({
-        timeout: 2000,
-        sandbox: arg,
+        timeout: 1000,
+        sandbox: sandbox,
         wasm: false,
         eval: false,
+        allowAsync: true,
+        // fixAsync: true,
+        compiler: "javascript",
     });
-    console.log({ arg: arg, code: code });
+    console.log("RUNNING:", code, sandbox);
     return vm.run(code);
 }
-worker_threads_1.parentPort.on("message", function (message) { return __awaiter(void 0, void 0, void 0, function () {
-    function mkHandle(person) {
-        var _this = this;
-        return {
-            get: function (key) { return sendRequest(key, person, { method: "get" }); },
-            set: function (key, value) { return __awaiter(_this, void 0, void 0, function () { return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4 /*yield*/, sendRequest(key, person, { method: "set", body: value })];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/];
-                }
-            }); }); },
-        };
+function withTimeout(promise, ms) {
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            return [2 /*return*/, Promise.race([
+                    promise,
+                    new Promise(function (_, reject) { return setTimeout(function () { return reject(new Error('Execution timeout')); }, ms); })
+                ])];
+        });
+    });
+}
+var sanitizeDBKey = function (key) {
+    if (typeof key !== 'string' || key.length > 256 || /[\W]/.test(key))
+        throw new Error('Invalid DB key');
+};
+function mkHandle(person) {
+    return new Proxy({}, {
+        get: function (target, prop) {
+            var _this = this;
+            if (prop === 'get') {
+                return function (key) {
+                    sanitizeDBKey(key);
+                    return sendRequest(key, person, { method: "get" });
+                };
+            }
+            if (prop === 'set') {
+                return function (key, value) { return __awaiter(_this, void 0, void 0, function () {
+                    return __generator(this, function (_a) {
+                        switch (_a.label) {
+                            case 0:
+                                sanitizeDBKey(key);
+                                if (value !== undefined && typeof value !== 'string') {
+                                    throw new Error('DB value must be string or undefined');
+                                }
+                                if (value && value.length > 1024 * 1024) {
+                                    throw new Error('DB value too large');
+                                }
+                                return [4 /*yield*/, sendRequest(key, person, { method: "set", body: value })];
+                            case 1:
+                                _a.sent();
+                                return [2 /*return*/];
+                        }
+                    });
+                }); };
+            }
+            throw new Error("Unauthorized access to handle property: ".concat(prop));
+        }
+    });
+}
+function mkRow(person, key, defaultValue) {
+    if (typeof key !== 'string' || key.length > 256 || /[^\w-]/.test(key)) {
+        throw new Error('Invalid DB key');
     }
-    function mkRow(person, key, defaultValue) {
-        var handle = mkHandle(person);
-        var get = function () { return handle.get(key).then(function (v) {
+    var handle = mkHandle(person);
+    var get = function () { return handle.get(key).then(function (v) {
+        try {
             var res = v ? JSON.parse(v) : defaultValue;
-            console.log("got", res);
             return res;
-        }); };
-        var set = function (value) { return handle.set(key, JSON.stringify(value)); };
-        var update = function (func) { return get().then(function (v) { return set(func(v)); }); };
-        var del = function () { return handle.set(key, undefined); };
-        return { get: get, set: set, update: update, delete: del };
-    }
-    var callback, defCon, ctx, res, err_1;
+        }
+        catch (e) {
+            throw new Error('Invalid JSON in DB value');
+        }
+    }); };
+    var set = function (value) {
+        var serialized;
+        try {
+            serialized = value !== undefined ? JSON.stringify(value) : undefined;
+        }
+        catch (e) {
+            throw new Error('Unable to serialize DB value');
+        }
+        return handle.set(key, serialized);
+    };
+    var update = function (func) { return get().then(function (v) { return set(func(v)); }); };
+    var del = function () { return handle.set(key, undefined); };
+    return new Proxy({ get: get, set: set, update: update, delete: del }, {
+        get: function (target, prop) {
+            if (['get', 'set', 'update', 'delete'].includes(prop)) {
+                return target[prop];
+            }
+            throw new Error("Unauthorized access to row property: ".concat(prop));
+        },
+        set: function () {
+            throw new Error('Cannot modify DBRow properties');
+        }
+    });
+}
+worker_threads_1.parentPort.on("message", function (message) { return __awaiter(void 0, void 0, void 0, function () {
+    var callback, defCon_1, result, err_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
                 if (!(message.tag === "response")) return [3 /*break*/, 1];
                 callback = messageQueue.get(message.requestId);
                 if (callback)
-                    callback(message.value);
+                    callback({ value: message.value });
                 messageQueue.delete(message.requestId);
-                return [3 /*break*/, 6];
+                return [3 /*break*/, 5];
             case 1:
-                if (!(message.tag === "request")) return [3 /*break*/, 6];
-                defCon = {
+                if (!(message.tag === "request")) return [3 /*break*/, 5];
+                if (typeof message.getCtx !== 'string' || typeof message.lam !== 'string' ||
+                    typeof message.self !== 'string' || typeof message.other !== 'string') {
+                    console.log(message);
+                    worker_threads_1.parentPort.postMessage({ tag: "error", error: "Invalid input types" });
+                    return [2 /*return*/];
+                }
+                defCon_1 = {
                     self: message.self,
                     other: message.other,
-                    getTable: function (key, defaultValue) { return (__assign(__assign({}, mkRow(message.self, key, defaultValue)), { other: mkRow(message.other, key, defaultValue) })); }
+                    getTable: function (key, defaultValue) {
+                        sanitizeDBKey(key);
+                        return new Proxy({}, {
+                            get: function (target, prop) {
+                                if (prop === 'self') {
+                                    return mkRow(message.self, key, defaultValue);
+                                }
+                                if (prop === 'other') {
+                                    return mkRow(message.other, key, defaultValue);
+                                }
+                                if (['get', 'set', 'update', 'delete'].includes(prop)) {
+                                    return mkRow(message.self, key, defaultValue)[prop];
+                                }
+                                throw new Error("Unauthorized access to table property: ".concat(prop));
+                            }
+                        });
+                    }
                 };
                 _a.label = 2;
             case 2:
-                _a.trys.push([2, 5, , 6]);
-                ctx = runCode("(".concat(message.getCtx, ")(defCon)"), { defCon: defCon });
-                res = runCode("(".concat(message.lam, ")(ctx, arg)"), { ctx: __assign(__assign({}, defCon), ctx), arg: message.arg });
-                if (!(res instanceof Promise)) return [3 /*break*/, 4];
-                return [4 /*yield*/, res];
+                _a.trys.push([2, 4, , 5]);
+                return [4 /*yield*/, withTimeout((function () { return __awaiter(void 0, void 0, void 0, function () {
+                        var frozenDefCon, sandbox, ctx, sandbox2, res;
+                        return __generator(this, function (_a) {
+                            switch (_a.label) {
+                                case 0:
+                                    frozenDefCon = Object.freeze(defCon_1);
+                                    sandbox = Object(null);
+                                    sandbox.defCon = frozenDefCon;
+                                    ctx = runCode("(".concat(message.getCtx, ")(defCon)"), sandbox);
+                                    sandbox2 = Object(null);
+                                    sandbox2.ctx = ctx;
+                                    sandbox2.ctx.self = message.self;
+                                    sandbox2.ctx.other = message.other;
+                                    sandbox2.ctx.getTable = defCon_1.getTable;
+                                    sandbox2.arg = message.arg;
+                                    res = runCode("(".concat(message.lam, ")(ctx, arg)"), sandbox2);
+                                    if (!(res instanceof Promise)) return [3 /*break*/, 2];
+                                    return [4 /*yield*/, res];
+                                case 1:
+                                    res = _a.sent();
+                                    _a.label = 2;
+                                case 2:
+                                    JSON.stringify(res);
+                                    return [2 /*return*/, res];
+                            }
+                        });
+                    }); })(), 5000)];
             case 3:
-                res = _a.sent();
-                _a.label = 4;
+                result = _a.sent();
+                worker_threads_1.parentPort.postMessage({ tag: "ok", value: JSON.stringify(result) });
+                return [3 /*break*/, 5];
             case 4:
-                worker_threads_1.parentPort.postMessage({ tag: "ok", value: JSON.stringify(res) });
-                return [3 /*break*/, 6];
-            case 5:
                 err_1 = _a.sent();
                 worker_threads_1.parentPort.postMessage({ tag: "error", error: err_1.message });
-                return [3 /*break*/, 6];
-            case 6: return [2 /*return*/];
+                return [3 /*break*/, 5];
+            case 5: return [2 /*return*/];
         }
     });
 }); });

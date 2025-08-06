@@ -1,163 +1,90 @@
+import { auth, Key, PubKey, storedKey } from "./auth";
+import { htmlElement } from "./html";
+import { Box, DBTable, ServerLogin } from "./userspace";
 
-import { auth, PubKey, storedKey } from "./auth";
-import { Serial } from "./dataSchemas";
-import { Box, DBRow, DBTable, ServerLogin } from "./userspace";
-const bob: PubKey = "npub18k3y97ke7nr9qv9c5rnnxxm0kyyxq4mu7dngzj867zh7de9a45yswakdmu"
-
+const bob = auth.keyFromNsec("nsec1qp3y43jmsdr665dc2gxmaxm6e5pqtyhqdr3zsfa902j2vr3tcpysrwnux0");
+const body = document.body;
 
 type Message = {
-  sender: string,
-  content: string,
-  receiver: string,
-}
-
+  self: string;
+  other: string;
+  content: string;
+};
 type msgDB = {
-  msgs: DBTable<Message[]>
-}
-
-export const msgBox : Box <msgDB> = {
-  getCtx : (c) =>{
+  msgs: DBTable<Message[]>;
+  username: DBTable<string>;
+};
+export const msgBox: Box<msgDB> = {
+  getCtx: (c) => {
     return {
-      msgs : c.getTable("msgs", [] as Message[]),
-    }
-  },
-  api : {
-    sendMsg : async (ctx, arg)=>{
-
-      const newMessage = {
-        sender: ctx.self,
-        receiver: ctx.other,
-        content: arg as string
-      }
-      await ctx.msgs.update(msgs=> [...msgs, newMessage])
-      await ctx.msgs.other.update(msgs => [...msgs, newMessage])
-
-    },
-    seeMsgs : (ctx, _) => ctx.msgs.get()
-  }
-}
-
-
-
-let serverurl = "https://lamboxserver.duckdns.org"
-serverurl = "http://localhost:8080"
-
-
-const key = storedKey()
-
-const bobkey = auth.keyFromNsec("nsec1qp3y43jmsdr665dc2gxmaxm6e5pqtyhqdr3zsfa902j2vr3tcpysrwnux0")
-
-
-
-// ServerLogin(serverurl, msgBox, bobkey)
-
-// ServerLogin(serverurl, msgBox, key).then(async conn=>{
-
-//   // const resp = await conn(bobkey.pub, msgBox.api.sendMsg, "hello")
-//   // console.log(resp)
-
-//   // const msgs = await conn(key.pub, msgBox.api.seeMsgs)
-//   // console.log(msgs)
-
-// })
-
-
-
-import { PersonalDBHandle } from "./userspace";
-
-{
-
-
-
-  async function sendRequest(key: string, person: PubKey, op: {method: "get"} | {method: "set", body: string|undefined}){
-    console.log("sendRequest", key, person, op)
-    return undefined
-  }
-
-  // Function to create a proxied DB handle (to prevent tampering)
-  function mkHandle(person: PubKey): PersonalDBHandle {
-    return new Proxy({}, {
-      get(target, prop: string) {
-        if (prop === 'get') {
-          return (key: string) => {
-            if (typeof key !== 'string' || key.length > 256 || /[^\w-]/.test(key)) { // Sanitize key: alphanum + -, max length
-              throw new Error('Invalid DB key');
-            }
-            return sendRequest(key, person, { method: "get" });
-          };
-        }
-        if (prop === 'set') {
-          return async (key: string, value: string | undefined) => {
-            if (typeof key !== 'string' || key.length > 256 || /[^\w-]/.test(key)) {
-              throw new Error('Invalid DB key');
-            }
-            if (value !== undefined && typeof value !== 'string') {
-              throw new Error('DB value must be string or undefined');
-            }
-            if (value && value.length > 1024 * 1024) { // Limit value size (e.g., 1MB)
-              throw new Error('DB value too large');
-            }
-            await sendRequest(key, person, { method: "set", body: value });
-          };
-        }
-        throw new Error(`Unauthorized access to handle property: ${prop}`);
-      }
-    }) as PersonalDBHandle;
-  }
-
-
-  function mkRow<T extends Serial>(person: PubKey, key: string, defaultValue: T): DBRow<T> {
-    if (typeof key !== 'string' || key.length > 256 || /[^\w-]/.test(key)) {
-      throw new Error('Invalid DB key');
-    }
-    const handle = mkHandle(person);
-    const get = () => handle.get(key).then(v => {
-      try {
-        const res = v ? JSON.parse(v) as T : defaultValue;
-        console.log("got", res);
-        return res;
-      } catch (e) {
-        throw new Error('Invalid JSON in DB value');
-      }
-    });
-    const set = (value: T | undefined) => {
-      let serialized: string | undefined;
-      try {
-        serialized = value !== undefined ? JSON.stringify(value) : undefined;
-      } catch (e) {
-        throw new Error('Unable to serialize DB value');
-      }
-      return handle.set(key, serialized);
+      msgs: c.getTable("msgs", [] as Message[]),
+      username: c.getTable("username", "anonynmous" as string),
+      followers: c.getTable("followers", [] as PubKey[]),
+      blocked: c.getTable("blocked", [] as PubKey[]),
     };
-    const update = (func: (value: T) => T | undefined) => get().then(v => set(func(v)));
-    const del = () => handle.set(key, undefined);
-    // Proxy the row to prevent property tampering or inspection
-    return new Proxy({ get, set, update, delete: del }, {
-      get(target, prop: string) {
-        if (['get', 'set', 'update', 'delete'].includes(prop)) {
-          return target[prop as keyof DBRow<T>];
+  },
+  api: {
+    sendMsg: async (ctx, arg) => {
+      const newMessage = {
+        self: ctx.self,
+        other: ctx.other,
+        content: arg as string,
+      };
+      await ctx.msgs.update((msgs) => [...msgs, newMessage]);
+      await ctx.msgs.other.update((msgs) => [...msgs, newMessage]);
+    },
+    seeMsgs: (ctx, _) => ctx.msgs.get(),
+    setUsername: (ctx, arg) => ctx.username.set(arg as string),
+    getUsername: (ctx, _) => ctx.username.other.get(),
+  },
+};
+let serverurl = "https://lamboxserver.duckdns.org";
+serverurl = "http://localhost:8080";
+
+// const key = storedKey();
+
+const key: Key = bob;
+
+(async () => {
+  await ServerLogin(serverurl, msgBox, bob);
+
+  ServerLogin(serverurl, msgBox, key).then(async (con) => {
+    body.appendChild(htmlElement("h1", "Logged in"));
+
+    const msgbox = htmlElement("div", "");
+    body.appendChild(msgbox);
+
+    const usernameTable = new Map<string, string>();
+
+    const getUsername = async (p: PubKey) => {
+      if (usernameTable.has(p)) return usernameTable.get(p);
+      const username = await con(p, msgBox.api.getUsername);
+      usernameTable.set(p, username);
+      return username;
+    };
+
+    const displayMsgs = () =>
+      con(key.pub, msgBox.api.seeMsgs).then(async (msgs) => {
+        msgbox.innerText = "";
+        for (let m of msgs) {
+          const name = await getUsername(m.self);
+          const othername = await getUsername(m.other);
+
+          msgbox.appendChild(
+            htmlElement("p", `${name} -> ${othername}: ${m.content}`)
+          );
         }
-        throw new Error(`Unauthorized access to row property: ${prop}`);
-      },
-      set() {
-        throw new Error('Cannot modify DBRow properties');
-      }
-    });
-  }
-  
+      });
+    await con(key.pub, msgBox.api.setUsername, "bob");
 
+    const sendbutton = htmlElement("button", "say hi");
+    sendbutton.onclick = async () => {
+      await con(bob.pub, msgBox.api.sendMsg, "hi");
+      displayMsgs();
+    };
 
-  const handle = mkHandle("npub18k3y97ke7nr9qv9c5rnnxxm0kyyxq4mu7dngzj867zh7de9a45yswakdmu")
-  const row = mkRow("npub18k3y97ke7nr9qv9c5rnnxxm0kyyxq4mu7dngzj867zh7de9a45yswakdmu", "test", "test")
+    body.appendChild(sendbutton);
 
-  console.log(
-    // handle.get = async (s:string)=>"evil"
-    // row.get()
-
-    row.delete
-  )
-
-
-
-
-}
+    displayMsgs();
+  });
+})();
