@@ -19,7 +19,7 @@ const server: http.Server = http.createServer(async (req: http.IncomingMessage, 
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.statusCode = 204; // No Content
+    res.statusCode = 204;
     res.end();
     return;
   }
@@ -68,3 +68,13 @@ const server: http.Server = http.createServer(async (req: http.IncomingMessage, 
 server.listen(port, hostname, () => {
   console.log(`Server running at http://${hostname}:${port}/`);
 });
+
+
+
+function getDB(key:string){
+
+}
+
+function setDB(key:string, value:string){
+
+}

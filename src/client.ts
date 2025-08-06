@@ -1,5 +1,6 @@
 import { auth, Key, PubKey, storedKey } from "./auth";
-import { htmlElement } from "./html";
+import { htmlElement, popup } from "./html";
+import { Writable } from "./store";
 import { Box, DBTable, ServerLogin } from "./userspace";
 
 const bob = auth.keyFromNsec(
@@ -16,8 +17,8 @@ type msgDB = {
   msgs: DBTable<Message[]>;
   username: DBTable<string>;
   followers: DBTable<PubKey[]>
+  follows: DBTable<PubKey[]>
 };
-
 
 
 export const msgBox: Box<msgDB> = {
@@ -26,6 +27,7 @@ export const msgBox: Box<msgDB> = {
       msgs: c.getTable("msgs", [] as Message[]),
       username: c.getTable("username", "anonynmous" as string),
       followers: c.getTable("followers", [] as PubKey[]),
+      follows: c.getTable("follows", [] as PubKey[]),
     };
   },
   api: {
@@ -41,7 +43,16 @@ export const msgBox: Box<msgDB> = {
     seeMsgs: (ctx, _) => ctx.msgs.get(),
     setUsername: (ctx, arg) => ctx.username.set(arg as string),
     getUsername: (ctx, _) => ctx.username.other.get(),
-    // follow: ()
+    follow: (async (ctx) => {
+      ctx.followers.other.update(fs=>[...fs, ctx.self])
+      ctx.follows.update(fs => [...fs, ctx.other]);
+    }),
+    unfollow: (async (ctx) => {
+      ctx.followers.other.update(fs => fs.filter(f => f !== ctx.self));
+      ctx.follows.update(fs => fs.filter(f => f !== ctx.other));
+    }),
+    getFollowers: (ctx) => ctx.followers.get(),
+    getFollows: (ctx) => ctx.follows.get(),
   },
 };
 let serverurl = "https://lamboxserver.duckdns.org";
@@ -50,20 +61,23 @@ serverurl = "http://localhost:8080";
 const key = storedKey();
 
 (async () => {
-  await ServerLogin(serverurl, msgBox, bob);
+  await ServerLogin(serverurl, msgBox, bob).then(async (con) => {
+    con(bob.pub, msgBox.api.setUsername, "bob");
+  })
 
   ServerLogin(serverurl, msgBox, key).then(async (con) => {
     body.appendChild(htmlElement("h1", "Logged in"));
 
-    const msgbox = htmlElement("div", "");
-    body.appendChild(msgbox);
+    // body.appendChild(htmlElement("button", "active users", "", {
+      
+    // }))
 
-    const messageInput = htmlElement("input", "") as HTMLInputElement;
-    messageInput.setAttribute("type", "text");
-    messageInput.setAttribute("placeholder", "Type a message");
-    body.appendChild(messageInput);
+    const chat_partner = new Writable<PubKey> (bob.pub)
 
-    const usernameTable = new Map<string, string>();
+
+    const usernameTable = new Map<PubKey, string>();
+
+
 
     const getUsername = async (p: PubKey) => {
       if (usernameTable.has(p)) return usernameTable.get(p);
@@ -71,10 +85,53 @@ const key = storedKey();
       usernameTable.set(p, username);
       return username;
     };
+
+
+    const partnerpicker = htmlElement("button", "chatting with", "", {
+      onclick: ()=>{
+
+        const ulist = htmlElement("div", "")
+        ulist.appendChild(htmlElement("h2", "active users"));
+        const close = popup(ulist)
+        usernameTable.forEach((username, pubkey) => {
+          const userElement = htmlElement("p", username, "", {
+            onclick: async () => {
+              chat_partner.set(pubkey)
+              displayMsgs();
+              close();
+            }
+          });
+          ulist.appendChild(userElement);
+        })
+      }
+    });
+
+    body.appendChild(partnerpicker);
+    chat_partner.subscribe(async (partner) => {
+      getUsername(partner).then((username) => {
+        partnerpicker.innerHTML = `Chatting with ${username}`;
+      });
+    })
+
+
+
+    const msgbox = htmlElement("div", "");
+    body.appendChild(msgbox);
+
+
+    const messageInput = htmlElement("input", "") as HTMLInputElement;
+    messageInput.setAttribute("type", "text");
+    messageInput.setAttribute("placeholder", "Type a message");
+    body.appendChild(messageInput);
+
+    con(bob.pub, msgBox.api.follow)
+    con(bob.pub, msgBox.api.getFollows).then((follows:PubKey[]) => follows.forEach(getUsername))
+
     const displayMsgs = () =>
       con(key.pub, msgBox.api.seeMsgs).then(async (msgs) => {
         msgbox.innerText = "";
         for (let m of msgs) {
+          if (m.self !== chat_partner.get() && m.other !== chat_partner.get()) continue;
           const name = await getUsername(m.self);
           const othername = await getUsername(m.other);
 
@@ -93,7 +150,7 @@ const key = storedKey();
     async function sendMessage() {
       const msg = messageInput.value;
       if (!msg) return;
-      await con(bob.pub, msgBox.api.sendMsg, msg);
+      await con(chat_partner.get(), msgBox.api.sendMsg, msg);
       displayMsgs();
       messageInput.value = "";
     }

@@ -1,10 +1,6 @@
 // import { log } from "./helpers"
 export type htmlKey = 'innerText'|'onclick'|'children'|'class'|'id'|'contentEditable'|'eventListeners'|'color'|'background'
 
-
-
-
-
 export const htmlElement = (tag:string, text:string, cls?:string = "", args?:Partial<Record<htmlKey, any>>):HTMLElement =>{
 
   const _element = document.createElement(tag)
@@ -29,3 +25,23 @@ export const htmlElement = (tag:string, text:string, cls?:string = "", args?:Par
   return _element
 }
 
+
+export const popup = (dialogfield: HTMLElement)=>{
+
+  const popupbackground = htmlElement("div", "", "popup-background");
+
+  popupbackground.appendChild(dialogfield);
+  document.body.appendChild(popupbackground);
+  popupbackground.onclick = () => {
+    popupbackground.remove();
+  }
+  dialogfield.classList.add("popup-dialog");
+  popupbackground.appendChild(htmlElement("div", "close", "popup-close", {
+    onclick: () => {
+      popupbackground.remove();
+    }
+  }))
+
+  return ()=>popupbackground.remove()
+
+}
