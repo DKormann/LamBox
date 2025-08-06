@@ -125,8 +125,6 @@ function ServerLogin(url, box, key) {
                                         case 0: return [4 /*yield*/, lamHash(lam, bserial)];
                                         case 1:
                                             lamH = _a.sent();
-                                            console.log("lam:", lam);
-                                            console.log("lamhash:", lamH);
                                             request = {
                                                 tag: "call",
                                                 pubkey: key.pub,

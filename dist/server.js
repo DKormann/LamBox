@@ -51,7 +51,7 @@ var server = http.createServer(function (req, res) { return __awaiter(void 0, vo
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-            res.statusCode = 204; // No Content
+            res.statusCode = 204;
             res.end();
             return [2 /*return*/];
         }
@@ -105,3 +105,7 @@ var server = http.createServer(function (req, res) { return __awaiter(void 0, vo
 server.listen(port, hostname, function () {
     console.log("Server running at http://".concat(hostname, ":").concat(port, "/"));
 });
+function getDB(key) {
+}
+function setDB(key, value) {
+}
