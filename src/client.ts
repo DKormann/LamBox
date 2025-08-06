@@ -51,8 +51,8 @@ export const msgBox: Box<msgDB> = {
       ctx.followers.other.update(fs => fs.filter(f => f !== ctx.self));
       ctx.follows.update(fs => fs.filter(f => f !== ctx.other));
     }),
-    getFollowers: (ctx) => ctx.followers.get(),
-    getFollows: (ctx) => ctx.follows.get(),
+    getFollowers: (ctx) => ctx.followers.other.get(),
+    getFollows: (ctx) => ctx.follows.other.get(),
   },
 };
 let serverurl = "https://lamboxserver.duckdns.org";
@@ -64,12 +64,31 @@ const key = storedKey();
 (async () => {
   await ServerLogin(serverurl, msgBox, bob).then(async (con) => {
     con(bob.pub, msgBox.api.setUsername, "bob");
+    // console.log("bob logged in");
+    
   })
 
   ServerLogin(serverurl, msgBox, key).then(async (con) => {
     const header = htmlElement("h1", "Logged in as ")
     body.appendChild(header);
-    const usernameButton = htmlElement("button", "", "",)
+    const usernameButton = htmlElement("button", "", "",);
+    usernameButton.onclick = ()=>{
+      const dia = htmlElement("div", "")
+      const close = popup(dia);
+      dia.appendChild(htmlElement("h2", "Change Username"));
+      const input = htmlElement("input", "") as HTMLInputElement;
+      input.value = myname.get();
+      input.addEventListener("keydown", async (e: KeyboardEvent) => {
+        if (e.key === "Enter") {
+          con(key.pub, msgBox.api.setUsername, input.value).then(()=>{
+            myname.set(input.value);
+          })
+          close();
+        }
+      });
+      input.focus();
+      dia.appendChild(input);
+    }
     header.appendChild(usernameButton);
 
 
@@ -93,9 +112,6 @@ const key = storedKey();
       usernameTable.set(p, username);
       return username;
     };
-
-
-
 
     const partnerpicker = htmlElement("button", "chatting with", "", {
       onclick: ()=>{
@@ -134,8 +150,29 @@ const key = storedKey();
     messageInput.setAttribute("placeholder", "Type a message");
     body.appendChild(messageInput);
 
-    con(bob.pub, msgBox.api.follow)
-    con(bob.pub, msgBox.api.getFollows).then((follows:PubKey[]) => follows.forEach(getUsername))
+    con(bob.pub, msgBox.api.follow).then(()=>{
+      console.log("following bob");
+      
+      con(bob.pub, msgBox.api.getFollowers).then((follower:PubKey[]) => {
+        follower.forEach(getUsername)
+        console.log("followers", follower);
+      })
+
+      con(bob.pub, msgBox.api.getFollows).then((follows:PubKey[]) => {
+        follows.forEach(getUsername)
+        console.log("follows", follows);
+      })
+
+      con(key.pub, msgBox.api.getFollowers).then((follower:PubKey[]) => {
+        follower.forEach(getUsername)
+        console.log("my followers", follower);
+      })
+
+      con(key.pub, msgBox.api.getFollows).then((follows:PubKey[]) => {
+        follows.forEach(getUsername)
+        console.log("my follows", follows);
+      })
+    })
 
     const displayMsgs = () =>
       con(key.pub, msgBox.api.seeMsgs).then(async (msgs) => {
