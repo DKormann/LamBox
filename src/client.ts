@@ -18,7 +18,7 @@ if (localServer) serverurl = "http://localhost:8080"
 
 const body = document.body;
 
-const view = htmlElement("div", "")
+
 
 
 
