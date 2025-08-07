@@ -71,15 +71,14 @@ var requestCount = 0;
 // Helper to run code in VM with enhanced security
 function runCode(code, sandbox) {
     var vm = new vm2_1.VM({
-        timeout: 1000,
+        timeout: 10000,
         sandbox: sandbox,
         wasm: false,
         eval: false,
         allowAsync: true,
-        // fixAsync: true,
+        fixAsync: false,
         compiler: "javascript",
     });
-    console.log("RUNNING:", code, sandbox);
     return vm.run(code);
 }
 function withTimeout(promise, ms) {
@@ -131,20 +130,33 @@ function mkHandle(person) {
     });
 }
 function mkRow(person, key, defaultValue) {
+    var _this = this;
     if (typeof key !== 'string' || key.length > 256 || /[^\w-]/.test(key)) {
         throw new Error('Invalid DB key');
     }
     var handle = mkHandle(person);
-    var get = function () { return handle.get(key).then(function (v) {
-        try {
-            var res = v ? JSON.parse(v) : defaultValue;
-            return res;
-        }
-        catch (e) {
-            throw new Error('Invalid JSON in DB value');
-        }
+    var get = function () { return __awaiter(_this, void 0, void 0, function () {
+        var v, res;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    console.log("row get");
+                    return [4 /*yield*/, handle.get(key)];
+                case 1:
+                    v = _a.sent();
+                    try {
+                        res = v ? JSON.parse(v) : defaultValue;
+                        return [2 /*return*/, res];
+                    }
+                    catch (e) {
+                        throw new Error('Invalid JSON in DB value');
+                    }
+                    return [2 /*return*/];
+            }
+        });
     }); };
     var set = function (value) {
+        console.log("row set", value);
         var serialized;
         try {
             serialized = value !== undefined ? JSON.stringify(value) : undefined;
@@ -169,7 +181,7 @@ function mkRow(person, key, defaultValue) {
     });
 }
 worker_threads_1.parentPort.on("message", function (message) { return __awaiter(void 0, void 0, void 0, function () {
-    var callback, defCon_1, result, err_1;
+    var callback, defCon, frozenDefCon, code, result, err_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -187,7 +199,7 @@ worker_threads_1.parentPort.on("message", function (message) { return __awaiter(
                     worker_threads_1.parentPort.postMessage({ tag: "error", error: "Invalid input types" });
                     return [2 /*return*/];
                 }
-                defCon_1 = {
+                defCon = {
                     self: message.self,
                     other: message.other,
                     getTable: function (key, defaultValue) {
@@ -211,36 +223,12 @@ worker_threads_1.parentPort.on("message", function (message) { return __awaiter(
                 _a.label = 2;
             case 2:
                 _a.trys.push([2, 4, , 5]);
-                return [4 /*yield*/, withTimeout((function () { return __awaiter(void 0, void 0, void 0, function () {
-                        var frozenDefCon, sandbox, ctx, sandbox2, res;
-                        return __generator(this, function (_a) {
-                            switch (_a.label) {
-                                case 0:
-                                    frozenDefCon = Object.freeze(defCon_1);
-                                    sandbox = Object(null);
-                                    sandbox.defCon = frozenDefCon;
-                                    ctx = runCode("(".concat(message.getCtx, ")(defCon)"), sandbox);
-                                    sandbox2 = Object(null);
-                                    sandbox2.ctx = ctx;
-                                    sandbox2.ctx.self = message.self;
-                                    sandbox2.ctx.other = message.other;
-                                    sandbox2.ctx.getTable = defCon_1.getTable;
-                                    sandbox2.arg = message.arg;
-                                    res = runCode("(".concat(message.lam, ")(ctx, arg)"), sandbox2);
-                                    if (!(res instanceof Promise)) return [3 /*break*/, 2];
-                                    return [4 /*yield*/, res];
-                                case 1:
-                                    res = _a.sent();
-                                    _a.label = 2;
-                                case 2:
-                                    JSON.stringify(res);
-                                    return [2 /*return*/, res];
-                            }
-                        });
-                    }); })(), 5000)];
+                frozenDefCon = Object.freeze(defCon);
+                code = "\n      let ctx = {...defaultContext, ...((".concat(message.getCtx, ")(defaultContext))};\n\n      let res = (").concat(message.lam, ")(ctx, arg);\n      // if (res instanceof Promise) {res = await res};\n      // JSON.stringify(res);\n      (res instanceof Promise) ? res.then(JSON.stringify) : (async()=>JSON.stringify(res))()\n      ");
+                return [4 /*yield*/, runCode(code, { defaultContext: frozenDefCon, arg: message.arg })];
             case 3:
                 result = _a.sent();
-                worker_threads_1.parentPort.postMessage({ tag: "ok", value: JSON.stringify(result) });
+                worker_threads_1.parentPort.postMessage({ tag: "ok", value: result });
                 return [3 /*break*/, 5];
             case 4:
                 err_1 = _a.sent();

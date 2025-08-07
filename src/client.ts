@@ -1,7 +1,19 @@
 import { auth, Key, PubKey, storedKey } from "./auth";
+import { Serial } from "./dataSchemas";
 import { htmlElement, popup } from "./html";
 import { Writable } from "./store";
-import { Box, DBTable, ServerLogin } from "./userspace";
+import { Box, DBRow, DBTable, ServerLogin } from "./userspace";
+
+
+
+const location = window.location.pathname.split("/").filter(Boolean)
+
+let serverurl = "https://lambox.chickenkiller.com/"
+
+if (location.includes("local")){
+  serverurl  = "http://localhost:8080"
+}
+
 
 const bob = auth.keyFromNsec(
   "nsec1qp3y43jmsdr665dc2gxmaxm6e5pqtyhqdr3zsfa902j2vr3tcpysrwnux0"
@@ -18,6 +30,7 @@ type msgDB = {
   username: DBTable<string>;
   followers: DBTable<PubKey[]>
   follows: DBTable<PubKey[]>
+  add:<T extends Serial>(t:DBRow<T[]>, x:T) => Promise<void>
 };
 
 
@@ -28,6 +41,7 @@ export const msgBox: Box<msgDB> = {
       username: c.getTable("username", "anonynmous" as string),
       followers: c.getTable("followers", [] as PubKey[]),
       follows: c.getTable("follows", [] as PubKey[]),
+      add:(table, x) => table.update(t=>t.includes(x)?t:[...t,x])
     };
   },
   api: {
@@ -44,27 +58,28 @@ export const msgBox: Box<msgDB> = {
     setUsername: (ctx, arg) => ctx.username.set(arg as string),
     getUsername: (ctx, _) => ctx.username.other.get(),
     follow: (async (ctx) => {
-      ctx.followers.other.update(fs=>[...fs, ctx.self])
-      ctx.follows.update(fs => [...fs, ctx.other]);
+      await ctx.add(ctx.followers.other, ctx.self);
+      await ctx.add(ctx.follows, ctx.other);
     }),
     unfollow: (async (ctx) => {
-      ctx.followers.other.update(fs => fs.filter(f => f !== ctx.self));
-      ctx.follows.update(fs => fs.filter(f => f !== ctx.other));
+      await ctx.followers.other.update(fs => fs.filter(f => f !== ctx.self));
+      await ctx.follows.update(fs => fs.filter(f => f !== ctx.other));
     }),
     getFollowers: (ctx) => ctx.followers.other.get(),
     getFollows: (ctx) => ctx.follows.other.get(),
   },
 };
-let serverurl = "https://lamboxserver.duckdns.org";
-serverurl = "http://localhost:8080";
-serverurl = "https://lambox.chickenkiller.com/"
+
 
 const key = storedKey();
+
+
+
 
 (async () => {
   await ServerLogin(serverurl, msgBox, bob).then(async (con) => {
     con(bob.pub, msgBox.api.setUsername, "bob");
-    // console.log("bob logged in");
+    console.log("bob logged in");
     
   })
 
@@ -107,6 +122,7 @@ const key = storedKey();
     const usernameTable = new Map<PubKey, string>();
 
     const getUsername = async (p: PubKey) => {
+
       if (usernameTable.has(p)) return usernameTable.get(p);
       const username = await con(p, msgBox.api.getUsername);
       usernameTable.set(p, username);
@@ -150,7 +166,8 @@ const key = storedKey();
     messageInput.setAttribute("placeholder", "Type a message");
     body.appendChild(messageInput);
 
-    con(bob.pub, msgBox.api.follow).then(()=>{
+    con(bob.pub, msgBox.api.follow)
+    .then(()=>{
       console.log("following bob");
       
       con(bob.pub, msgBox.api.getFollowers).then((follower:PubKey[]) => {
@@ -158,20 +175,6 @@ const key = storedKey();
         console.log("followers", follower);
       })
 
-      con(bob.pub, msgBox.api.getFollows).then((follows:PubKey[]) => {
-        follows.forEach(getUsername)
-        console.log("follows", follows);
-      })
-
-      con(key.pub, msgBox.api.getFollowers).then((follower:PubKey[]) => {
-        follower.forEach(getUsername)
-        console.log("my followers", follower);
-      })
-
-      con(key.pub, msgBox.api.getFollows).then((follows:PubKey[]) => {
-        follows.forEach(getUsername)
-        console.log("my follows", follows);
-      })
     })
 
     const displayMsgs = () =>
@@ -180,12 +183,10 @@ const key = storedKey();
         for (let m of msgs) {
           if (m.self !== chat_partner.get() && m.other !== chat_partner.get()) continue;
           const name = await getUsername(m.self);
-          const othername = await getUsername(m.other);
-
           msgbox.appendChild(
             htmlElement(
               "p",
-              `${name} -> ${othername}: ${m.content}`
+              `${name}: ${m.content}`
             )
           );
         }

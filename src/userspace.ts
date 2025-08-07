@@ -100,13 +100,13 @@ export type DBTable <T extends Serial> = DBRow<T> & {
   other: DBRow<T>,
 }
 
-export type defaultContext = {
+export type DefaultContext = {
   self: PubKey,
   other: PubKey,
   getTable: <T extends Serial>(key:string, defaultValue:T) => DBTable<T>
 }
 
-function exampleAPI (c:defaultContext){
+function exampleAPI (c:DefaultContext){
   let friends = c.getTable("friends", [] as PubKey[])
 
   return {
@@ -115,10 +115,10 @@ function exampleAPI (c:defaultContext){
   
 }
 
-export type APIFunction<C> = (ctx:defaultContext & C, arg:Serial) => Promise<void | Serial>
+export type APIFunction<C> = (ctx:DefaultContext & C, arg:Serial) => Promise<void | Serial>
 
 export type Box<C> = {
-  getCtx : (c:defaultContext) => C
+  getCtx : (c:DefaultContext) => C
   api: { [key: string]: APIFunction <C> }
 }
 

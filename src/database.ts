@@ -57,9 +57,7 @@ export async function acceptPublish(request: Request & {tag: "publish"}){
 }
 
 export async function acceptHost(request: Request & {tag: "host"}){
-  console.log("accepting host", request);
-  
-  
+
   let host = db.hosts.get(request.pubkey)!
 
 
@@ -76,7 +74,6 @@ export async function acceptHost(request: Request & {tag: "host"}){
 
 
 export async function acceptCall(request: Request & {tag: "call"}){
-
 
   const host = db.hosts.get(request.host)
   if (!host || !host.has(request.appHash)){
@@ -129,7 +126,6 @@ export async function acceptCall(request: Request & {tag: "call"}){
         if (message.method == "get"){
           val = db.store.get(message.person)?.get(message.key)
           console.log("got val: ",val);
-          
         }else if (message.method == "set"){
           let pstore = db.store.get(message.person)
           if (!pstore){
@@ -137,10 +133,10 @@ export async function acceptCall(request: Request & {tag: "call"}){
             db.store.set(message.person, pstore)
           }
           if (message.body == undefined){
+            // console.log("deleting val: ",message.key);
             pstore.delete(message.key)
           }else{
-            console.log("setting val: ",message.body);
-            
+            // console.log("setting val: ",message.body);
             pstore.set(message.key, message.body)
           }
         }
@@ -151,14 +147,40 @@ export async function acceptCall(request: Request & {tag: "call"}){
           value: val,
         }
         worker.postMessage(response)
+
       }else if (message.tag == "error"){
         console.error("error", message.error)
         reject(message.error)
         worker.terminate()
       }else if (message.tag == "ok"){
-        resolve(message.value??null)
+
+        const res = message.value ?? null
         worker.terminate()
+        resolve(message.value??null)
       }
     })
+
+    worker.on("error", (err)=>{
+      console.error("Worker error:", err);
+      reject(err);
+
+    });
+    
+    worker.on("exit", (code)=>{
+      if (code !== 0) {
+        console.error(`Worker stopped with exit code ${code}`);
+        reject(new Error(`Worker stopped with exit code ${code}`));
+      }
+    });
   })
+}
+
+
+
+function saveToDB(key:string, item:string){
+  
+}
+
+function getFromDB(key:string):string{
+  return "<RESULT FROM DATABASE>"
 }

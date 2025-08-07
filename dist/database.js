@@ -98,7 +98,6 @@ function acceptHost(request) {
     return __awaiter(this, void 0, void 0, function () {
         var host;
         return __generator(this, function (_a) {
-            console.log("accepting host", request);
             host = db.hosts.get(request.pubkey);
             if (host == undefined) {
                 host = new Set();
@@ -151,7 +150,7 @@ function acceptCall(request) {
             worker.postMessage(call);
             return [2 /*return*/, new Promise(function (resolve, reject) {
                     worker.on("message", function (message) {
-                        var _a, _b;
+                        var _a, _b, _c;
                         if (message.tag == "request") {
                             if (message.person != request.host && message.person != request.pubkey)
                                 throw new Error("Unauthorized");
@@ -168,10 +167,11 @@ function acceptCall(request) {
                                     db.store.set(message.person, pstore);
                                 }
                                 if (message.body == undefined) {
+                                    // console.log("deleting val: ",message.key);
                                     pstore.delete(message.key);
                                 }
                                 else {
-                                    console.log("setting val: ", message.body);
+                                    // console.log("setting val: ",message.body);
                                     pstore.set(message.key, message.body);
                                 }
                             }
@@ -188,11 +188,27 @@ function acceptCall(request) {
                             worker.terminate();
                         }
                         else if (message.tag == "ok") {
-                            resolve((_b = message.value) !== null && _b !== void 0 ? _b : null);
+                            var res = (_b = message.value) !== null && _b !== void 0 ? _b : null;
                             worker.terminate();
+                            resolve((_c = message.value) !== null && _c !== void 0 ? _c : null);
+                        }
+                    });
+                    worker.on("error", function (err) {
+                        console.error("Worker error:", err);
+                        reject(err);
+                    });
+                    worker.on("exit", function (code) {
+                        if (code !== 0) {
+                            console.error("Worker stopped with exit code ".concat(code));
+                            reject(new Error("Worker stopped with exit code ".concat(code)));
                         }
                     });
                 })];
         });
     });
+}
+function saveToDB(key, item) {
+}
+function getFromDB(key) {
+    return "<RESULT FROM DATABASE>";
 }

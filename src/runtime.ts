@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'worker_threads';
-import { VM, VMOptions } from 'vm2';
+import { VM } from 'vm2';
 import { PubKey } from './auth';
-import { defaultContext, Box, APIFunction, DBTable, PersonalDBHandle, DBRow } from './userspace';
+import { DefaultContext, Box, APIFunction, DBTable, PersonalDBHandle, DBRow } from './userspace';
 import { cast, Serial, validate } from './dataSchemas';
 
 export type WorkerCall = {
@@ -57,17 +57,16 @@ let requestCount = 0
 
 // Helper to run code in VM with enhanced security
 function runCode(code: string, sandbox: Object) {
+
   const vm = new VM({
-    timeout: 1000,
+    timeout: 10000,
     sandbox,
     wasm: false,
     eval: false,
     allowAsync: true,
-    // fixAsync: true,
+    fixAsync: false,
     compiler: "javascript",
   });
-
-  console.log("RUNNING:", code, sandbox)
 
   return vm.run(code);
 }
@@ -117,15 +116,18 @@ function mkRow<T extends Serial>(person: PubKey, key: string, defaultValue: T): 
     throw new Error('Invalid DB key');
   }
   const handle = mkHandle(person);
-  const get = () => handle.get(key).then(v => {
+  const get = async () => {
+    console.log("row get")
+    const v = await handle.get(key);
     try {
       const res = v ? JSON.parse(v) as T : defaultValue;
       return res;
     } catch (e) {
       throw new Error('Invalid JSON in DB value');
     }
-  });
+  };
   const set = (value: T | undefined) => {
+    console.log("row set", value)
     let serialized: string | undefined;
     try {
       serialized = value !== undefined ? JSON.stringify(value) : undefined;
@@ -165,7 +167,7 @@ parentPort.on("message", async (message: WorkerCall) => {
       return;
     }
 
-    const defCon: defaultContext = {
+    const defCon: DefaultContext = {
       self: message.self,
       other: message.other,
       getTable: <T extends Serial>(key: string, defaultValue: T) => {
@@ -189,26 +191,21 @@ parentPort.on("message", async (message: WorkerCall) => {
 
     try {
 
-      const result = await withTimeout((async () => {
-        const frozenDefCon = Object.freeze(defCon);
-        let sandbox = Object(null)
-        sandbox.defCon = frozenDefCon
-        const ctx = runCode(`(${message.getCtx})(defCon)`, sandbox);
-        let sandbox2 = Object(null)
-        sandbox2.ctx = ctx
-        sandbox2.ctx.self = message.self
-        sandbox2.ctx.other = message.other
-        sandbox2.ctx.getTable = defCon.getTable
-        sandbox2.arg = message.arg
+      const frozenDefCon = Object.freeze(defCon);
 
-        let res = runCode(`(${message.lam})(ctx, arg)`, sandbox2);
+      const code = `
+      let ctx = {...defaultContext, ...((${message.getCtx})(defaultContext))};
 
-        if (res instanceof Promise) res = await res;
-        JSON.stringify(res);
-        return res;
-      })(), 5000);
+      let res = (${message.lam})(ctx, arg);
+      // if (res instanceof Promise) {res = await res};
+      // JSON.stringify(res);
+      (res instanceof Promise) ? res.then(JSON.stringify) : (async()=>JSON.stringify(res))()
+      `
 
-      parentPort!.postMessage({ tag: "ok", value: JSON.stringify(result) } as WorkerMessage);
+
+      const result = await runCode(code, {defaultContext: frozenDefCon, arg:message.arg})
+
+      parentPort!.postMessage({ tag: "ok", value: result } as WorkerMessage);
     } catch (err) {
       parentPort!.postMessage({ tag: "error", error: (err as Error).message } as WorkerMessage);
     }
