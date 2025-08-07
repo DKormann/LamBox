@@ -7,7 +7,9 @@ export const htmlElement = (tag:string, text:string, cls:string = "", args?:Part
   _element.innerText = text
   if (cls) _element.classList.add(...cls.split('.').filter(x=>x))
   if (args) Object.entries(args).forEach(([key, value])=>{
-
+    if (key === 'parent'){
+      (value as HTMLElement).appendChild(_element)
+    }
     if (key==='children'){
       (value as HTMLElement[]).forEach(c=>_element.appendChild(c))
     }else if (key==='eventListeners'){

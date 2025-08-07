@@ -1,0 +1,408 @@
+
+import { PubKey } from "../auth"
+import { htmlElement } from "../html"
+import { Box, DBRow, DBTable, DefaultContext, dummyContext } from "../userspace"
+import { Serial } from "../dataSchemas"
+
+
+
+type PieceType = "pawn" | "knight" | "bishop" | "rook" | "queen" | "king" | "kingmoved" | "rookmoved" | "pawnmoved" | "pawnmoveddouble"
+
+type ChessPiece = {
+  type: PieceType
+  color: "white" | "black"
+}
+
+type Ps = ChessPiece| null
+type Row = [Ps, Ps, Ps, Ps, Ps, Ps, Ps, Ps]
+type Board = [Row, Row, Row, Row, Row, Row, Row, Row]
+
+
+type Match = {
+  white: PubKey,
+  black: PubKey,
+  board: Board,
+  turn: "white" | "black",
+  winner : "white" | "black" | "draw" | null
+}
+
+type Move = {
+  start: Pos
+  end: Pos
+  promo: PieceType
+}
+
+
+
+
+const chessCtx = (c:DefaultContext):ChessContext=>{
+
+  const startBoard:Board = [
+    [{type: "rook", color: "white"}, {type: "knight", color: "white"}, {type: "bishop", color: "white"}, {type: "queen", color: "white"}, {type: "king", color: "white"}, {type: "bishop", color: "white"}, {type: "knight", color: "white"}, {type: "rook", color: "white"}],
+    [{type: "pawn", color: "white"}, {type: "pawn", color: "white"}, {type: "pawn", color: "white"}, {type: "pawn", color: "white"}, {type: "pawn", color: "white"}, {type: "pawn", color: "white"}, {type: "pawn", color: "white"}, {type: "pawn", color: "white"}],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [{type: "pawn", color: "black"}, {type: "pawn", color: "black"}, {type: "pawn", color: "black"}, {type: "pawn", color: "black"}, {type: "pawn", color: "black"}, {type: "pawn", color: "black"}, {type: "pawn", color: "black"}, {type: "pawn", color: "black"}],
+    [{type: "rook", color: "black"}, {type: "knight", color: "black"}, {type: "bishop", color: "black"}, {type: "queen", color: "black"}, {type: "king", color: "black"}, {type: "bishop", color: "black"}, {type: "knight", color: "black"}, {type: "rook", color: "black"}]
+  ]
+
+  function posVec(pos:Pos):[number,number]{
+    return [pos % 10, Math.floor(pos / 10)]
+  }
+
+
+
+  function vecPos(vec:[number,number]):Pos{
+    return vec[0] + vec[1] * 10
+  }
+
+  if (vecPos(posVec(21)) != 21) throw new Error("posVec failed")
+
+  function isPos(pos:Pos):boolean{
+    const [x,y] = posVec(pos)
+    return x >= 0 && x < 8 && y >= 0 && y < 8
+  }
+
+
+  function getPieceAt(board:Board, pos:Pos):ChessPiece|null{
+    const [x,y] = posVec(pos)
+    return board[y][x]
+  }
+
+  function setPieceAt(board:Board, pos:Pos, piece:ChessPiece|null){
+    const [x,y] = posVec(pos)
+    board[y][x] = piece
+  }
+  
+  function getKing(board:Board, color:"white"|"black"):Pos|null{
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
+        const piece = board[i][j]
+        if (piece && piece.color === color && piece.type === "king"){
+          return i * 10 + j
+        }
+      }
+    }
+    return null
+  }
+
+  const strt = [10,-10,1,-1]
+  const diag = [11, -11, 9, -9]
+
+  function directions(p:ChessPiece):number[]{
+    switch (p.type) {
+      case "pawnmoved":
+      case "pawnmoveddouble":
+        return p.color === "white" ? [10] : [-10]
+      case "pawn":
+        return p.color === "white" ? [10, 20] : [-10, -20]
+      case "knight":
+        return [12,8,21,19,-12,8,-21,-19]
+      case "bishop":
+        return diag
+      case "rook":
+      case "rookmoved":
+        return strt
+      case "queen":
+      case "king":
+      case "kingmoved":
+        return diag.concat(strt)
+
+    }
+  }
+
+  function posadd(start:Pos, vec:[number, number]):Pos{
+    const [x,y] = posVec(start)
+    const [dx,dy] = vec
+    return vecPos([x+dx,y+dy])
+  }
+
+  function getPossibleMoves(board:Board, pos:Pos):Pos[]{
+
+    const piece = getPieceAt(board, pos)
+    if (!piece) return []
+    let res : Pos[] = []
+
+    let ty = piece.type
+    const dirs = directions(piece)
+    if (ty.startsWith("pawn")){
+      res = dirs
+      .map((vec)=>pos+vec)
+      .filter(isPos)
+      .filter((p)=>getPieceAt(board,p) == null)
+      const hity = piece.color == "white" ? 1 : -1
+
+
+      res = res.concat(
+        [1,-1]
+        .map(x=>posadd(pos,[x,hity]))
+        .filter(isPos)
+        .filter((pos)=>{
+          let target = getPieceAt(board,pos)
+          if (target) return target.color != piece.color
+          else{
+            target = getPieceAt(board, pos - hity * 10)
+            return target && target.color != piece.color && target.type == "pawnmoveddouble"
+          }
+        })
+      )
+    }else{
+      const ranged = ty.startsWith("rook") || ty.startsWith("bishop") || ty.startsWith("queen")
+      for (let dir of dirs){
+        let pp = pos
+        while(true){
+          pp = pp+dir
+          if (!isPos(pp)) break
+          const tar = getPieceAt(board,pp)
+          if (tar){
+            if (piece.color !== tar.color) res.push(pp)
+            break
+          }
+          res.push(pp)
+          if (!ranged) break
+        }
+      }
+
+      if (ty=="king"){
+        if (getPieceAt(board, pos +1) == null && getPieceAt(board,pos + 2) == null && getPieceAt(board, pos + 3)?.type == "rook") res.push(pos +2)
+        if (getPieceAt(board, pos -1) == null && getPieceAt(board,pos - 2) == null && getPieceAt(board, pos - 4)?.type == "rook") res.push(pos -2)
+      }
+    }
+    return res
+  }
+
+  function getLegalMoves(board:Board, pos:Pos):Pos[]{
+
+    return getPossibleMoves(board, pos)
+
+  }
+
+  function isInCheck(m:Match, color:"white"|"black"):boolean{
+    return false
+  }
+
+
+  function makeMove(m:Match, move:Move):Match{
+
+    if (m.winner != null) return m
+
+    let mover = getPieceAt(m.board, move.start)
+    if (!mover || mover.color !== m.turn) return m
+    const legalmoves = getLegalMoves(m.board, move.start)
+    if (!legalmoves.includes(move.end)) return m
+
+    if (mover.type == "pawn" || mover.type == "king" || mover.type == "rook") mover.type += "moved"
+    if (mover.type == "pawnmoved" && Math.abs(move.end - move.start) == 20) mover.type = "pawnmoveddouble" 
+    if (mover.type.startsWith("pawn")){
+      if (move.start%10 != move.end%10){
+        if (getPieceAt(m.board, move.end) == null){
+          setPieceAt(m.board, vecPos([move.end%10, Math.floor(move.start/10)]), null)
+        }
+      }
+    }
+
+    if (mover.type.startsWith("king")){
+      const dist = move.start - move.end
+      if (dist == 2){
+        setPieceAt(m.board, move.end + 1, {...mover, type:"rookmoved"})
+        setPieceAt(m.board, move.end - 2, null)
+      }
+      if (dist == -2){
+        setPieceAt(m.board, move.end - 1, {...mover, type:"rookmoved"})
+        setPieceAt(m.board, move.end + 1, null)
+      }
+    }
+    setPieceAt(m.board, move.end, mover)
+    if (mover.type.startsWith("pawn")){
+      const y = Math.floor(move.end/10)
+      if (y == 0 || y == 7) setPieceAt(m.board, move.end, {...mover, type: move.promo})
+    }
+    setPieceAt(m.board, move.start, null)
+
+    m.turn = m.turn === "white" ? "black" : "white"
+    if (getKing(m.board,m.turn) == null) m.winner = m.turn === "white" ? "black" : "white"
+
+    return m
+  }
+
+  return {
+    startBoard,
+    hosting: c.getTable("hosting", null as Match| null),
+    playing: c.getTable("playing", null as PubKey | null),
+    invites: c.getTable("invites", [] as PubKey[]),
+    add: (table, x) => table.update(t => t.includes(x) ? t : [...t, x]),
+    makeMove,
+  }
+}
+
+type ChessContext = {
+  startBoard : Board
+  hosting: DBTable<Match | null>
+  playing: DBTable<PubKey | null>
+  invites: DBTable<PubKey[]>
+
+  add: <T extends Serial>(t: DBRow<T[]>, x: T) => Promise<void>
+  makeMove: (m:Match, move:Move) => Match
+}
+
+const chessBox : Box<ChessContext> = {
+  getCtx : chessCtx,
+  api:{
+    sendInvite : async (ctx, _) => {
+      await Promise.all([
+        ctx.add(ctx.invites.other, ctx.self),
+        ctx.invites.set([]),
+      ])
+    },
+    getInvites: (ctx, _) => ctx.invites.get(),
+    declineInvite: async (ctx, _) => {
+      await ctx.invites.update(invites => invites.filter(invite => invite !== ctx.other) );
+    },
+    acceptInvite: async (ctx, _):Promise<boolean> => {
+
+      let invites = await ctx.invites.get()
+      if (!invites.includes(ctx.other)) return false
+
+      let playings = await Promise.all([
+        ctx.playing.get(),
+        ctx.playing.other.get(),
+      ])
+      if (playings.some(p=>p!=null)) return false
+
+      await Promise.all([
+        ctx.playing.set(ctx.other),
+        ctx.playing.other.set(ctx.self),
+        ctx.invites.set([]),
+        ctx.invites.other.set([]),
+      ])
+
+      
+
+      return true
+
+    }
+
+
+  }
+}
+
+const pieceImages = {
+  "pawn": "p",
+  "knight": "N",
+  "bishop": "B",
+  "rook": "R",
+  "queen": "Q",
+  "king": "K",
+  "kingmoved" :"K",
+  "rookmoved": "R",
+  "pawnmoved": "p",
+  "pawnmoveddouble": "p"
+}
+
+type Pos = number
+
+
+export const chessView =  (serverurl: string) => {
+  const ctx = chessCtx(dummyContext)
+  let match : Match = {
+    white: dummyContext.self,
+    black: dummyContext.other,
+    board: ctx.startBoard,
+    turn: "white",
+    winner: null
+  }
+
+  const chessBoard = htmlElement(
+    "div",
+    "",
+    "chessboard"
+  )
+
+  chessBoard.style.backgroundColor = "#f0d9b5"
+
+  const boardSize = (window.innerWidth < window.innerHeight ? window.innerWidth : window.innerHeight) * 0.6
+
+  chessBoard.style.width = boardSize + "px"
+  chessBoard.style.height = boardSize + "px"
+  chessBoard.style.margin = "auto"
+
+  chessBoard.style.position = "relative"
+  chessBoard.style.cursor = "pointer"
+
+  let focusPos : [number, number] | null = null
+
+
+  const displayBoard = ()=>{
+    chessBoard.innerHTML = ""
+    for (let j = 0; j < 8; j++) {
+      for (let i = 0; i < 8; i++) {
+        const square = htmlElement(
+          "div",
+          "",
+          "square"
+        )
+        square.style.width = boardSize / 8 + "px"
+        square.style.height = boardSize / 8 + "px"
+        chessBoard.appendChild(square)
+        square.style.backgroundColor = (i + j) % 2 === 0 ? "#b58863" : "#f0d9b5"
+
+        if (focusPos){
+          if (focusPos[0] === i && focusPos[1] === j){
+            square.style.backgroundColor = (i + j) % 2 === 0 ? "#c9b18f" : "#ffd7be"
+          }
+        }
+        square.style.left = j * boardSize / 8 + "px"
+        square.style.bottom = i * boardSize / 8 + "px"
+        square.style.position = "absolute"
+        square.onclick = e=>{
+
+          if (focusPos && focusPos[0] === i && focusPos[1] === j){
+            focusPos = null
+          }else{
+            if (focusPos){
+
+              match = ctx.makeMove(match, {
+                start: focusPos[0] * 10 + focusPos[1],
+                end: i * 10 + j,
+                promo: "queen"
+              })
+            }
+            focusPos = [i,j]
+          }
+          displayBoard()
+        }
+
+        const piece = match.board[i][j]
+
+        if (piece){
+          const pieceElement = htmlElement(
+            "div",
+            pieceImages[piece.type],
+            "piece"
+          )
+          pieceElement.style.width = boardSize / 8 + "px"
+          pieceElement.style.height = boardSize / 8 + "px"
+          pieceElement.style.position = "absolute"
+          square.appendChild(pieceElement)
+
+          pieceElement.style.color = piece.color === "white" ? "white" : "black"
+          pieceElement.style.fontWeight = "bold"
+          pieceElement.style.fontSize = boardSize / 8 + "px"
+        }
+      }
+    }
+  }
+
+  displayBoard()
+
+  return htmlElement("div", "", "", {
+    children: [
+      htmlElement("h1", "Chess"),
+      htmlElement("p", "Welcome to the chess page"),
+      chessBoard
+
+    ]
+  })
+}

@@ -106,6 +106,25 @@ export type DefaultContext = {
   getTable: <T extends Serial>(key:string, defaultValue:T) => DBTable<T>
 }
 
+export const dummyContext: DefaultContext = {
+  self: "npub1self",
+  other: "npub1other",
+  getTable: <T extends Serial> (key:string, defaultValue:T) => {
+    return {
+      get: () => Promise.resolve(defaultValue),
+      set: () => Promise.resolve(),
+      update: () => Promise.resolve(),
+      delete: () => Promise.resolve(),
+      other: {
+        get: () => Promise.resolve(defaultValue),
+        set: () => Promise.resolve(),
+        update: () => Promise.resolve(),
+        delete: () => Promise.resolve(),
+      }
+    }
+  }
+}
+
 function exampleAPI (c:DefaultContext){
   let friends = c.getTable("friends", [] as PubKey[])
 

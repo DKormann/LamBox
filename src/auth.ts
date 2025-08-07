@@ -42,6 +42,8 @@ export const auth: Auth = {
   checkEvent : (e:Event) => verifyEvent(e)
 }
 
+export const bob = auth.keyFromNsec("nsec1qp3y43jmsdr665dc2gxmaxm6e5pqtyhqdr3zsfa902j2vr3tcpysrwnux0");
+
 
 export type Key = {
   pub : PubKey,
