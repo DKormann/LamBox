@@ -20,8 +20,10 @@ type Location= {
 function getLocation():Location{
 
   const items = window.location.pathname.split("/").filter(Boolean)
+  console.log({items});
+  
   const serverLocal = items.includes("local")
-  const frontendLocal = window.location.hostname.includes("localhost") || window.location.hostname.includes("127.0.0.1")
+  const frontendLocal = ! items.includes(appname)
     
   return {
     serverLocal,
@@ -86,8 +88,11 @@ window.addEventListener("popstate", (e) => {
 function route(path: string[]){
 
 
-  const newpath = window.origin + "/" + [location.serverLocal? "local" : "", path].filter(Boolean).join('/')
+  const newpath = (location.serverLocal? "local" : "") + "/" + (location.frontendLocal? "" : appname) + "/" + path.join('/')
   window.history.pushState({}, "", newpath)
+
+  console.log(newpath);
+
 
   body.innerHTML = ''
   for (const app of apps){
