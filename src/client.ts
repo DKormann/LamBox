@@ -1,6 +1,7 @@
 import { auth, Key, PubKey, storedKey } from "./auth";
 import { chatView } from "./client/chat";
 import { chessView } from "./client/chess";
+import { Console } from "./client/consola";
 import { Serial } from "./dataSchemas";
 import { htmlElement, popup } from "./html";
 import { Writable } from "./store";
@@ -9,6 +10,8 @@ import { Box, DBRow, DBTable, ServerLogin } from "./userspace";
 
 
 const appname = "LamBox"
+
+document.title = appname
 
 
 type Location= {
@@ -20,8 +23,7 @@ type Location= {
 function getLocation():Location{
 
   const items = window.location.pathname.split("/").filter(Boolean)
-  console.log({items});
-  
+
   const serverLocal = items.includes("local")
   const frontendLocal = ! items.includes(appname)
     
@@ -38,14 +40,7 @@ let location  = getLocation()
 const serverurl = location.serverLocal ? "http://localhost:8080" : "https://lambox.chickenkiller.com/"
 
 
-
 const body = document.body;
-
-console.log("starting client on locatino", location)
-
-body.appendChild(htmlElement("h2", "lambox test"))
-
-
 
 
 const home = (): HTMLElement => htmlElement("div", "", "", {
@@ -53,11 +48,11 @@ const home = (): HTMLElement => htmlElement("div", "", "", {
     htmlElement("h1", "Home"),
     htmlElement("p", "Welcome to the lambox"),
 
-    ...apps.filter(x=>x.path).map(app => htmlElement("p", app.path, "", {
+    ...apps.filter(x=>x.path).map(app => htmlElement("p", "", "", {children:[htmlElement("button", app.path, "", {
       onclick: () => {
         route(app.path.split('/'))
       }
-    }))
+    })]}))
   ]
 })
 
@@ -71,6 +66,7 @@ const apps : {
   {init: home, path: "", cache: undefined},
   {init: chatView, path: "chat", cache: undefined},
   {init: chessView, path: "chess", cache: undefined},
+  {init: Console, path: "console", cache: undefined},
 
 ]
 
@@ -88,12 +84,10 @@ window.addEventListener("popstate", (e) => {
 function route(path: string[]){
 
 
-  const newpath = (location.serverLocal? "local" : "") + "/" + (location.frontendLocal? "" : appname) + "/" + path.join('/')
+  let  newpath = (location.serverLocal? "local" : "") + "/" + (location.frontendLocal? "" : appname) + "/" + path.join('/')
+  newpath = window.location.origin + "/" + newpath.split("/").filter(Boolean).join('/')
+  
   window.history.pushState({}, "", newpath)
-
-  console.log(newpath);
-
-
   body.innerHTML = ''
   for (const app of apps){
     if (app.path === path.join('/')){

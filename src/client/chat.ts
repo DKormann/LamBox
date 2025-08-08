@@ -71,8 +71,7 @@ export function chatView(serverurl: string) : HTMLElement{
   const container = htmlElement("div", "");
   ServerLogin(serverurl, msgBox, bob).then(async (con) => {
     con(bob.pub, msgBox.api.setUsername, "bob");
-    console.log("bob logged in");
-    
+
   }).then(()=>{
 
     ServerLogin(serverurl, msgBox, key).then(async (con) => {
@@ -122,6 +121,8 @@ export function chatView(serverurl: string) : HTMLElement{
       };
 
       const partnerpicker = htmlElement("button", "chatting with", "", {
+
+
         onclick: ()=>{
 
           const ulist = htmlElement("div", "")
@@ -137,6 +138,9 @@ export function chatView(serverurl: string) : HTMLElement{
             });
             ulist.appendChild(userElement);
           })
+          if (loading){
+            ulist.appendChild(htmlElement("p", "loading...", "", {style: {color: "gray"}}))
+          }
         }
       });
 
@@ -147,6 +151,8 @@ export function chatView(serverurl: string) : HTMLElement{
         });
       })
 
+
+      let loading = true
 
 
       const msgbox = htmlElement("div", "");
@@ -160,11 +166,11 @@ export function chatView(serverurl: string) : HTMLElement{
 
       con(bob.pub, msgBox.api.follow)
       .then(()=>{
-        console.log("following bob");
-        
+
         con(bob.pub, msgBox.api.getFollowers).then((follower:PubKey[]) => {
-          follower.forEach(getUsername)
-          console.log("followers", follower);
+          Promise.all(follower.map(getUsername)).then(()=>{
+            loading = false
+          })
         })
 
       })

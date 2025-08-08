@@ -1,5 +1,5 @@
-// import { log } from "./helpers"
-export type htmlKey = 'innerText'|'onclick'|'children'|'class'|'id'|'contentEditable'|'eventListeners'|'color'|'background'
+
+export type htmlKey = 'innerText'|'onclick'|'children'|'class'|'id'|'contentEditable'|'eventListeners'|'color'|'background' | 'style'
 
 export const htmlElement = (tag:string, text:string, cls:string = "", args?:Partial<Record<htmlKey, any>>):HTMLElement =>{
 
@@ -17,9 +17,11 @@ export const htmlElement = (tag:string, text:string, cls:string = "", args?:Part
         _element.addEventListener(event, listener)
       })
     }else if (key === 'color' || key === 'background'){
-
       _element.style[key] = value
-
+    }else if (key === 'style'){
+      Object.entries(value as Record<string, string>).forEach(([key, value])=>{
+        _element.style.setProperty(key, value)
+      })
     }else{
       _element[(key as 'innerText' | 'onclick' | 'id' | 'contentEditable')] = value
     }
