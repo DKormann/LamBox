@@ -289,10 +289,10 @@ const chessBox : Box<ChessContext> = {
       match = await hosting.get()
       if (!match) return "no match"
 
-      let [msg, newmatch] = ctx.makeMove(match, move as Move)
+      let [err, newmatch] = ctx.makeMove(match, move as Move)
 
-      if (msg) return msg
-      await ctx.hosting.other.set(newmatch)
+      if (err) return err
+      await hosting.set(newmatch)
       if (newmatch.winner) {
         await Promise.all([
           ctx.playing.set(null),
@@ -317,19 +317,8 @@ const chessBox : Box<ChessContext> = {
         })
       ])
     },
-    
-    getMatch: async (ctx) =>{
-      let hosting : DBRow<Match | null> = ctx.hosting
-      let match = await hosting.get()
-      if (match == null){
-        hosting = ctx.hosting.other
-        match = await hosting.get()
-      }
-      return match
-    }
-
+    getHosting: async (ctx) => ctx.hosting.other.get(),
   }
-
 }
 
 
@@ -473,18 +462,27 @@ export const chessView =  (serverurl: string) => {
     getSocialProvider(serverurl)
   ]).then(async ([chessServer, social]) => {
 
-    console.log(social.myname.get())
+    social.myname.subscribeLater(name=>{
+      console.log("myname:",name)
+    })
+
+    function getMatch() {
+      return chessServer(match.get()!.white, chessBox.api.getHosting)
+    }
+
+
     let waiting = false
     setInterval(() => {
 
+      const imwhite = match.get()?.white == mykey.pub
       if (waiting) return
 
       let m = match.get()
       if (!m) return
-      const mycolor = m.white == mykey.pub ? "white" : "black"
+      const mycolor = imwhite ? "white" : "black"
       if (m.turn === mycolor)return
       waiting = true
-      chessServer(mykey.pub, chessBox.api.getMatch).then(m=>{
+      getMatch().then(m=>{
         if (m.turn === mycolor){
           match.set(m)
         }
@@ -498,8 +496,15 @@ export const chessView =  (serverurl: string) => {
       if (!opponent){
         return
       }
-      match.set(await chessServer(opponent, chessBox.api.getMatch))
-      const m = match.get()
+
+      let m = await chessServer(mykey.pub, chessBox.api.getHosting)
+      console.log("my myhosting:", m)
+      if (m == null){
+        m = await chessServer(opponent, chessBox.api.getHosting)
+        console.log("opponent hosting:", m)
+      }
+
+      match.set(m)
 
       console.log("match", m)
       
@@ -514,6 +519,8 @@ export const chessView =  (serverurl: string) => {
       }
 
       const mycolor = match.get()!.white == mykey.pub ? "white" : "black"
+
+      console.log("mycolor", mycolor)
 
       currentOpponentName.set(await social.getUsername(opponent))
       
