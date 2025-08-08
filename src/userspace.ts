@@ -129,12 +129,12 @@ export const dummyContext: DefaultContext = {
 
 function exampleAPI (c:DefaultContext){
   let friends = c.getTable("friends", [] as PubKey[])
-
   return {
     friends
-  }
-  
+  } 
 }
+
+
 
 export type APIFunction<C> = (ctx:DefaultContext & C, arg:Serial) => Promise<void | Serial>
 

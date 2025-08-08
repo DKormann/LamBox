@@ -30,6 +30,37 @@ export const htmlElement = (tag:string, text:string, cls:string = "", args?:Part
 }
 
 
+
+
+
+export const html = (tag:string, ...cs:(string | HTMLElement | Partial<Record<htmlKey, any>>)[]):HTMLElement=>{
+  let content = ''
+  let children: HTMLElement[] = []
+  let args: Partial<Record<htmlKey, any>> = {}
+  for (let c of cs){
+    if (typeof c === 'string') content = c
+    else if (c instanceof HTMLElement) children.push(c)
+    else args = {...args, ...c}
+  }
+  return htmlElement(tag, content, "", {...args, children})
+}
+
+
+export type HTMLGenerator = (...cs:(string | HTMLElement | Partial<Record<htmlKey, any>>)[]) => HTMLElement
+
+export const p:HTMLGenerator = (...cs)=>html("p", ...cs)
+export const h1:HTMLGenerator = (...cs)=>html("h1", ...cs)
+export const h2:HTMLGenerator = (...cs)=>html("h2", ...cs)
+export const h3:HTMLGenerator = (...cs)=>html("h3", ...cs)
+export const h4:HTMLGenerator = (...cs)=>html("h4", ...cs)
+
+export const div:HTMLGenerator = (...cs)=>html("div", ...cs)
+export const button:HTMLGenerator = (...cs)=>html("button", ...cs) as HTMLButtonElement
+export const input:HTMLGenerator = (...cs)=>html("input", ...cs) as HTMLInputElement
+export const textarea:HTMLGenerator = (...cs)=>html("textarea", ...cs) as HTMLTextAreaElement
+
+
+
 export const popup = (dialogfield: HTMLElement)=>{
 
   const popupbackground = htmlElement("div", "", "popup-background");

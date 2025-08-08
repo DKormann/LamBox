@@ -1,8 +1,10 @@
 
 import { PubKey, storedKey } from "../auth"
-import { htmlElement } from "../html"
+import { button, div, h1, h2, p, popup } from "../html"
 import { Box, DBRow, DBTable, DefaultContext, dummyContext, ServerLogin } from "../userspace"
 import { Serial } from "../dataSchemas"
+import { chatView, getSocialProvider, msgBox } from "./chat"
+import { Writable } from "../store"
 
 
 
@@ -33,8 +35,6 @@ type Move = {
 }
 
 
-
-
 const chessCtx = (c:DefaultContext):ChessContext=>{
 
   const startBoard:Board = [
@@ -51,8 +51,6 @@ const chessCtx = (c:DefaultContext):ChessContext=>{
   function posVec(pos:Pos):[number,number]{
     return [pos % 10, Math.floor(pos / 10)]
   }
-
-
 
   function vecPos(vec:[number,number]):Pos{
     return vec[0] + vec[1] * 10
@@ -153,7 +151,6 @@ const chessCtx = (c:DefaultContext):ChessContext=>{
           if (!ranged) break
         }
       }
-
       if (ty=="king"){
         if (getPieceAt(board, pos +1) == null && getPieceAt(board,pos + 2) == null && getPieceAt(board, pos + 3)?.type == "rook") res.push(pos +2)
         if (getPieceAt(board, pos -1) == null && getPieceAt(board,pos - 2) == null && getPieceAt(board, pos - 4)?.type == "rook") res.push(pos -2)
@@ -173,14 +170,14 @@ const chessCtx = (c:DefaultContext):ChessContext=>{
   }
 
 
-  function makeMove(m:Match, move:Move):Match{
+  function makeMove(m:Match, move:Move):[string, Match]{
 
-    if (m.winner != null) return m
+    if (m.winner != null) return ["game over", m]
 
     let mover = getPieceAt(m.board, move.start)
-    if (!mover || mover.color !== m.turn) return m
+    if (!mover || mover.color !== m.turn) return ["not your turn", m]
     const legalmoves = getLegalMoves(m.board, move.start)
-    if (!legalmoves.includes(move.end)) return m
+    if (!legalmoves.includes(move.end)) return ["illegal move", m]
 
     if (mover.type == "pawn" || mover.type == "king" || mover.type == "rook") mover.type += "moved"
     if (mover.type == "pawnmoved" && Math.abs(move.end - move.start) == 20) mover.type = "pawnmoveddouble" 
@@ -213,7 +210,7 @@ const chessCtx = (c:DefaultContext):ChessContext=>{
     m.turn = m.turn === "white" ? "black" : "white"
     if (getKing(m.board,m.turn) == null) m.winner = m.turn === "white" ? "black" : "white"
 
-    return m
+    return ["", m]
   }
 
   return {
@@ -223,6 +220,7 @@ const chessCtx = (c:DefaultContext):ChessContext=>{
     invites: c.getTable("invites", [] as PubKey[]),
     add: (table, x) => table.update(t => t.includes(x) ? t : [...t, x]),
     makeMove,
+    getLegalMoves,
   }
 }
 
@@ -231,14 +229,17 @@ type ChessContext = {
   hosting: DBTable<Match | null>
   playing: DBTable<PubKey | null>
   invites: DBTable<PubKey[]>
-
   add: <T extends Serial>(t: DBRow<T[]>, x: T) => Promise<void>
-  makeMove: (m:Match, move:Move) => Match
+  makeMove: (m:Match, move:Move) => [string, Match]
+  getLegalMoves: (board:Board, pos:Pos) => Pos[]
 }
 
 const chessBox : Box<ChessContext> = {
   getCtx : chessCtx,
+
   api:{
+
+    getPlaying : async (ctx, _) => ctx.playing.get(),
 
     isPlaying : async (ctx, _) => true,
     sendInvite : async (ctx, _) => {
@@ -251,16 +252,16 @@ const chessBox : Box<ChessContext> = {
     declineInvite: async (ctx, _) => {
       await ctx.invites.update(invites => invites.filter(invite => invite !== ctx.other) );
     },
-    acceptInvite: async (ctx, _):Promise<boolean> => {
+    acceptInvite: async (ctx, _):Promise<[string, boolean]> => {
 
       let invites = await ctx.invites.get()
-      if (!invites.includes(ctx.other)) return false
+      if (!invites.includes(ctx.other)) return ["no invite", false]
 
       let playings = await Promise.all([
         ctx.playing.get(),
         ctx.playing.other.get(),
       ])
-      if (playings.some(p=>p!=null)) return false
+      if (playings.some(p=>p!=null)) return ["already playing", false]
       await Promise.all([
         ctx.playing.set(ctx.other),
         ctx.playing.other.set(ctx.self),
@@ -268,7 +269,8 @@ const chessBox : Box<ChessContext> = {
         ctx.invites.other.set([]),
       ])
 
-      ctx.hosting.other.set({
+      await ctx.hosting.set(null)
+      await ctx.hosting.other.set({
         white: ctx.other,
         black: ctx.self,
         board: ctx.startBoard,
@@ -276,30 +278,60 @@ const chessBox : Box<ChessContext> = {
         winner: null
       })
 
-      ctx.hosting.set(null)
-      return true
+      return ["", true]
     },
 
+    makeMove: async (ctx, move):Promise<Match|string> =>{
 
+      let hosting : DBRow<Match | null> = ctx.hosting
+      let match = await hosting.get()
+      if (!match) hosting = ctx.hosting.other
+      match = await hosting.get()
+      if (!match) return "no match"
 
-    makeMove: async (ctx, move) =>{
+      let [msg, newmatch] = ctx.makeMove(match, move as Move)
 
-      let match = await ctx.hosting.other.get()
-      if (!match) return
-      match = ctx.makeMove(match, move as Move)
-      await ctx.hosting.other.set(match)
-      if (match.winner) {
+      if (msg) return msg
+      await ctx.hosting.other.set(newmatch)
+      if (newmatch.winner) {
         await Promise.all([
-          ctx.hosting.other.set(null),
           ctx.playing.set(null),
           ctx.playing.other.set(null),
         ])
       }
       return match
     },
+
+    resign: async (ctx, _) => {
+
+      let hosting : DBRow<Match | null> = ctx.hosting
+      let match = await hosting.get()
+      if (!match) hosting = ctx.hosting.other
+      await Promise.all([
+        ctx.playing.set(null),
+        ctx.playing.other.set(null),
+        hosting.update(m =>{
+          if (!m) return
+          m.winner = m.white == ctx.self ? "black" : "white"
+          return m
+        })
+      ])
+    },
     
+    getMatch: async (ctx) =>{
+      let hosting : DBRow<Match | null> = ctx.hosting
+      let match = await hosting.get()
+      if (match == null){
+        hosting = ctx.hosting.other
+        match = await hosting.get()
+      }
+      return match
+    }
+
   }
+
 }
+
 
 const pieceImages = {
   "pawn": "p",
@@ -319,49 +351,44 @@ type Pos = number
 
 export const chessView =  (serverurl: string) => {
 
+  const mykey = storedKey()
 
-  
 
   const ctx = chessCtx(dummyContext)
-  let match : Match = {
-    white: dummyContext.self,
+
+  let dummyMatch = (): Match => ({
+    white: mykey.pub,
     black: dummyContext.other,
     board: ctx.startBoard,
     turn: "white",
     winner: null
-  }
+  })
 
-  const chessBoard = htmlElement(
-    "div",
-    "",
-    "chessboard"
-  )
-
-  
-
-  chessBoard.style.backgroundColor = "#f0d9b5"
+  let match = new Writable<Match | null>(dummyMatch())
 
   const boardSize = (window.innerWidth < window.innerHeight ? window.innerWidth : window.innerHeight) * 0.6
-
-  chessBoard.style.width = boardSize + "px"
-  chessBoard.style.height = boardSize + "px"
-  chessBoard.style.margin = "auto"
-
-  chessBoard.style.position = "relative"
-  chessBoard.style.cursor = "pointer"
+  const chessBoard = div({class:"chessboard",style:{
+    backgroundColor: "#f0d9b5",
+    width: boardSize + "px",
+    height: boardSize + "px",
+    margin: "auto",
+    position: "relative",
+    cursor: "pointer",
+  }})
 
   let focusPos : [number, number] | null = null
 
+  let mkMove : (move:Move) => Promise<void> = async (move) => {
+    match.update(m=>ctx.makeMove(m!, move)[1])
+  }
 
-  const displayBoard = ()=>{
+  const displayBoard = (m:Match)=>{
+
     chessBoard.innerHTML = ""
+
     for (let j = 0; j < 8; j++) {
       for (let i = 0; i < 8; i++) {
-        const square = htmlElement(
-          "div",
-          "",
-          "square"
-        )
+        const square = div({class: "square"})
         square.style.width = boardSize / 8 + "px"
         square.style.height = boardSize / 8 + "px"
         chessBoard.appendChild(square)
@@ -382,25 +409,25 @@ export const chessView =  (serverurl: string) => {
           }else{
             if (focusPos){
 
-              match = ctx.makeMove(match, {
+
+              const mov:Move = {
                 start: focusPos[0] * 10 + focusPos[1],
                 end: i * 10 + j,
                 promo: "queen"
-              })
+              }
+              if (ctx.getLegalMoves(m.board,mov.start).includes(mov.end)){
+                mkMove(mov)
+              }
             }
+
             focusPos = [i,j]
           }
-          displayBoard()
         }
 
-        const piece = match.board[i][j]
+        const piece = m.board[i][j]
 
         if (piece){
-          const pieceElement = htmlElement(
-            "div",
-            pieceImages[piece.type],
-            "piece"
-          )
+          const pieceElement = div( pieceImages[piece.type], {class:"piece"})
           pieceElement.style.width = boardSize / 8 + "px"
           pieceElement.style.height = boardSize / 8 + "px"
           pieceElement.style.position = "absolute"
@@ -414,25 +441,172 @@ export const chessView =  (serverurl: string) => {
     }
   }
 
-  displayBoard()
+  match.subscribe(m=>{
+    if (m) displayBoard(m)
+  })
+
+  const currentOpponentName = new Writable<string | null>(null)
+  const currentMatch = new Writable<Match | null>(null)
 
 
+  const oppbanner = p()
+  currentOpponentName.subscribe(op=>{
+    if (op){
+      oppbanner.innerText = "Playing against " + op
+    }else{
+      oppbanner.innerText = ""
+    }
+  })
 
-  const container = htmlElement("div", "", "", {
-    children: [
-      htmlElement("h1", "Chess"),
-      htmlElement("p", "Welcome to the chess page"),
-      chessBoard
+  const resignbutton = button("resign")
 
-    ]
+  const container = div(
+    h1("Chess"),
+    p("Welcome to the chess page"),
+    oppbanner,
+    resignbutton,
+    chessBoard
+  )
+
+  Promise.all([
+    ServerLogin(serverurl, chessBox, mykey),
+    getSocialProvider(serverurl)
+  ]).then(async ([chessServer, social]) => {
+
+    console.log(social.myname.get())
+    let waiting = false
+    setInterval(() => {
+
+      if (waiting) return
+
+      let m = match.get()
+      if (!m) return
+      const mycolor = m.white == mykey.pub ? "white" : "black"
+      if (m.turn === mycolor)return
+      waiting = true
+      chessServer(mykey.pub, chessBox.api.getMatch).then(m=>{
+        if (m.turn === mycolor){
+          match.set(m)
+        }
+        waiting = false
+      })
+    }, 200);
+
+    async function displayMatch(){
+
+      const opponent = await chessServer(mykey.pub, chessBox.api.getPlaying) as PubKey | null
+      if (!opponent){
+        return
+      }
+      match.set(await chessServer(opponent, chessBox.api.getMatch))
+      const m = match.get()
+
+      console.log("match", m)
+      
+      if (!m) {
+        currentOpponentName.set(null)
+        return
+      }
+
+      if (m.winner){
+        popup(div("game over"))
+        return
+      }
+
+      const mycolor = match.get()!.white == mykey.pub ? "white" : "black"
+
+      currentOpponentName.set(await social.getUsername(opponent))
+      
+      resignbutton.onclick = async ()=>{
+        await chessServer(opponent, chessBox.api.resign)
+      }
+
+
+      mkMove = async (move: Move) => {
+        console.log("move", move)
+        const resp = await chessServer(opponent, chessBox.api.makeMove, move) as string | Match
+        console.log("resp", resp)
+        if (typeof resp === "string"){
+        }else{
+          match.set(resp)
+        }
+      }
+    }
+
+    displayMatch()
+
+    async function inviteFriend(pubkey: PubKey){
+      if (await chessServer(pubkey, chessBox.api.isPlaying).catch(e=>false)){
+        chessServer(pubkey, chessBox.api.sendInvite)
+        social.con(pubkey, msgBox.api.sendMsg, "I sent you an invitation to play chess")
+        popup(div("invitation sent!"))
+      }else{
+        const close = popup(div(
+          h2("this user doesnt have chess"),
+          button("send them an invite message", {
+            onclick: async ()=>{
+              await social.con(pubkey, msgBox.api.sendMsg, "Wanna play chess with me?")
+              close()
+              popup(div("message sent!"))
+            }
+          }
+        )))
+      }
+    }
+
+    social.loaded.subscribe(loaded=>{
+      if (!loaded) return
+      container.appendChild(
+        div(
+          button("Play against a friend", {
+            onclick: () => {
+              const close = popup(div(
+                h2( "Play against a friend"),
+
+                (()=>{
+                  const invitebox = div()
+
+                  chessServer(mykey.pub, chessBox.api.getInvites).then((invites:PubKey[])=>{
+                    invitebox.appendChild(p("Invites:"))
+                    invites.forEach(invite=>{
+                      social.getUsername(invite).then(username=>{
+                        invitebox.appendChild(button(username,{onclick:()=>{
+                          chessServer(invite, chessBox.api.acceptInvite).then(([msg, ok])=>{
+                            if (ok){
+                              console.log({msg})
+                              popup(div("game accepted!"))
+                              displayMatch()
+                            }else{
+                              popup(div(msg))
+                            }
+                          })
+                        }
+                      }))
+                      })
+                    })
+                  })                  
+                  return invitebox
+                })(),
+                p( "Select a friend to play against"),
+                ... Array.from(social.nameTable.get().entries()).map(([pubkey, username]) => {
+                  return p(
+                    button(username, {
+                      onclick: () => {
+                        inviteFriend(pubkey)
+                        close()
+                      }
+                    }))
+                  }),
+                button("Cancel", {onclick: () => close()})
+              ))
+            },
+          }),
+        )
+      )
+    })
   })
 
 
-  const mykey = storedKey()
-
-  // ServerLogin(serverurl, chessBox, mykey){
-
-  // }
 
   return container
 }
