@@ -4,7 +4,7 @@ import { Request } from "./userspace"
 import { Worker } from "worker_threads"
 import { WorkerCall, WorkerMessage } from "./runtime"
 
-
+import fs from "fs"
 
 type resultKey = string
 type Lambda = string
@@ -24,8 +24,6 @@ let db: DB = {
   hosts: new Map(),
   store: new Map(),
 }
-
-
 
 
 export async function acceptEvent(event: Event):Promise<string|null>{
@@ -53,6 +51,7 @@ export async function acceptPublish(request: Request & {tag: "publish"}){
   Object.entries(request.app.api).forEach(([key, value])=>{
     db.lambdas.set(apiHashes[key], value)
   })
+  fs.writeFileSync("db.json", JSON.stringify(db))
   return null
 }
 

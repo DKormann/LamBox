@@ -8,7 +8,6 @@ import { Writable } from "./store";
 import { Box, DBRow, DBTable, ServerLogin } from "./userspace";
 
 
-
 const appname = "LamBox"
 
 document.title = appname
@@ -66,11 +65,9 @@ const apps : {
   {init: home, path: "", cache: undefined},
   {init: chatView, path: "chat", cache: undefined},
   {init: chessView, path: "chess", cache: undefined},
-  {init: Console, path: "console", cache: undefined},
+  {init: url => Console(url, cmd => eval(cmd)), path: "console", cache: undefined},
 
 ]
-
-
 
 route(location.path)
 

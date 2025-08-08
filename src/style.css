@@ -16,6 +16,8 @@ body{
 
 @media (prefers-color-scheme: light) {
   body {
+    --background: #fff;
+    --color: #000;
     background-color: var(--background);
     color: var(--color);
   }

@@ -1,13 +1,7 @@
-
-
 import { htmlElement } from "../html"
 import { Stored } from "../store"
 
-
-
-
-
-function objectView(obj: any, depth: number = 0):HTMLElement{
+const objectView = (obj: any, depth: number = 0):HTMLElement=>{
 
   const ws:string = " ".repeat(depth)
   if (depth > 2) return htmlElement("p", "...")
@@ -19,6 +13,7 @@ function objectView(obj: any, depth: number = 0):HTMLElement{
     }
     return div
   }
+  if (obj instanceof Function) return htmlElement("p", ws + obj.toString())
   if (obj == undefined) return htmlElement("p", ws + "undefined")
   if (typeof obj === "string") return htmlElement("p", ws + obj)
   if (typeof obj === "number") return htmlElement("p", ws+ obj.toString())
@@ -38,7 +33,10 @@ function objectView(obj: any, depth: number = 0):HTMLElement{
 const F = 22
 
 
-export function Console(url:string) :HTMLElement{
+const fun = (cmd:string) => eval(cmd)
+
+
+export function Console(url:string, evaluator : (cmd:string) => any = fun) :HTMLElement{
 
 
   const container = htmlElement("div", "")
@@ -47,21 +45,30 @@ export function Console(url:string) :HTMLElement{
   container.style.whiteSpace = "pre"
   container.style.paddingLeft = "2em"
 
-  container.style.paddingBottom = "5em"
 
 
 
   const input = htmlElement("input", "") as HTMLInputElement
 
   input.style.position = "fixed"
+  input.style.padding = "1em"
   input.style.bottom = "0"
   input.style.zIndex = "1000"
-  input.style.margin = "auto"
+  input.style.width = "90%"
+  input.style.left = "1%"
+
+
   setTimeout(() => {
     input.focus()
   }, 100);
 
   container.appendChild(input)
+
+  const textbox = htmlElement("div", "")
+  container.appendChild(textbox)
+
+  textbox.style.paddingBottom = "5em"
+
 
   // const cmdhist = [] as string[]
   const cmdhist = new Stored("cmdhist", [] as string[])
@@ -76,8 +83,9 @@ export function Console(url:string) :HTMLElement{
       cmdhistidx = -1
       cmdhist.update(e=>[...e, input.value])
       pushmsg(">> " + input.value)
+
       try{
-        pushmsg(eval(`()=>{return ${input.value}}`)())
+        pushmsg(evaluator(input.value))
       }catch(e) {
         console.log(input.value)
         console.error(e)
@@ -93,16 +101,12 @@ export function Console(url:string) :HTMLElement{
 
     if (e.key == "ArrowUp") {
       const tlist = cmdhist.get().filter(x=>x.startsWith(userinput))
-      console.log(tlist, cmdhistidx)
       const t = tlist[tlist.length + cmdhistidx]
       if (t) input.value = t
-      cmdhistidx -= 1
     }else if (e.key == "ArrowDown"){
       const tlist = cmdhist.get().filter(x=>x.startsWith(userinput))
-      console.log(tlist, cmdhistidx)
       const t = tlist[tlist.length + cmdhistidx]
       if (t) input.value = t
-
       cmdhistidx += 1
     }else{
       userinput = input.value
@@ -111,7 +115,7 @@ export function Console(url:string) :HTMLElement{
   })
 
   function pushmsg(msg:any){
-    container.appendChild(
+    textbox.appendChild(
       objectView(msg)
     )
     setTimeout(() => {
