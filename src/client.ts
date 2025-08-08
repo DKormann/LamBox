@@ -26,7 +26,7 @@ const body = document.body;
 const home = (): HTMLElement => htmlElement("div", "", "", {
   children:[
     htmlElement("h1", "Home"),
-    htmlElement("p", "Welcome to the home page"),
+    htmlElement("p", "Welcome to the lambox"),
 
     ...apps.filter(x=>x.path).map(app => htmlElement("p", app.path, "", {
       onclick: () => {
