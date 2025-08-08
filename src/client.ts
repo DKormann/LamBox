@@ -7,18 +7,41 @@ import { Writable } from "./store";
 import { Box, DBRow, DBTable, ServerLogin } from "./userspace";
 
 
-const location = window.location.pathname.split("/").filter(Boolean)
-const localServer = location.includes("local")
 
-let serverurl = "https://lambox.chickenkiller.com/"
-if (localServer) serverurl = "http://localhost:8080"
+const appname = "LamBox"
 
+
+type Location= {
+  serverLocal: boolean,
+  frontendLocal: boolean,
+  path: string[]
+} 
+
+function getLocation():Location{
+
+  const items = window.location.pathname.split("/").filter(Boolean)
+  const serverLocal = items.includes("local")
+  const frontendLocal = window.location.hostname.includes("localhost") || window.location.hostname.includes("127.0.0.1")
+    
+  return {
+    serverLocal,
+    frontendLocal,
+    path: items.filter(x=>x!='local' && x!= appname)
+  }
+}
+
+
+let location  = getLocation()
+
+const serverurl = location.serverLocal ? "http://localhost:8080" : "https://lambox.chickenkiller.com/"
 
 
 
 const body = document.body;
 
+console.log("starting client on locatino", location)
 
+body.appendChild(htmlElement("h2", "lambox test"))
 
 
 
@@ -30,7 +53,7 @@ const home = (): HTMLElement => htmlElement("div", "", "", {
 
     ...apps.filter(x=>x.path).map(app => htmlElement("p", app.path, "", {
       onclick: () => {
-        route(app.path)
+        route(app.path.split('/'))
       }
     }))
   ]
@@ -50,26 +73,25 @@ const apps : {
 ]
 
 
-const path = location.filter(x=>x!='local').join('/')
 
-route(path)
+route(location.path)
 
 
 window.addEventListener("popstate", (e) => {
-  route(window.location.pathname.split("/").filter(Boolean).join('/'))
+  location = getLocation() 
+  route(location.path)
 })
 
 
-function route(path: string){
+function route(path: string[]){
 
-  path = path.split("/").filter(x=>x!='local').filter(Boolean).join('/')
-  
-  const newpath = window.origin + "/" + [localServer? "local" : "", path].filter(Boolean).join('/')
+
+  const newpath = window.origin + "/" + [location.serverLocal? "local" : "", path].filter(Boolean).join('/')
   window.history.pushState({}, "", newpath)
 
   body.innerHTML = ''
   for (const app of apps){
-    if (app.path === path){
+    if (app.path === path.join('/')){
       if (!app.cache){
         app.cache = app.init(serverurl)
       }
