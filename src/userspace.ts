@@ -34,7 +34,9 @@ export type Request = {
 })
 
 
-export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) {
+export type ServerCon<C> = (target:PubKey, lam:APIFunction<C>, arg?:Serial) => Promise<any>
+
+export async function ServerLogin<C>(url:string, box:Box<C>, key:Key) : Promise<ServerCon<C>> {
 
   async function sendRequest(request:Request){
     const event = signEvent(JSON.stringify(request), key.sec)

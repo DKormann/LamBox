@@ -71,7 +71,6 @@ export async function acceptHost(request: Request & {tag: "host"}){
   return null
 }
 
-
 export async function acceptCall(request: Request & {tag: "call"}){
 
   const host = db.hosts.get(request.host)

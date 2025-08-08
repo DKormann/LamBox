@@ -4,7 +4,7 @@ import { bob, PubKey, storedKey } from "../auth";
 import { Serial } from "../dataSchemas";
 import { htmlElement, popup } from "../html";
 import { Writable } from "../store";
-import { Box, DBRow, DBTable, ServerLogin } from "../userspace";
+import { Box, DBRow, DBTable, ServerCon, ServerLogin } from "../userspace";
 
 
 
@@ -62,155 +62,193 @@ export const msgBox: Box<msgDB> = {
 
 const key = storedKey();
 
+export type SocialProvider = {
+  nameTable: Writable<Map<PubKey,string>>
+  getUsername: (p: PubKey) => Promise<string>
+  con: ServerCon<msgDB>
+  loaded: Writable<boolean>
+  myname: Writable<string>
+}
+
+let socialProvider: SocialProvider | null = null
+
+async function doGetSocialProvider(serverurl:string): Promise<SocialProvider> {
+  const nameTable = new Writable<Map<PubKey,string>>(new Map())
+  const loaded = new Writable<boolean>(false)
+  const myname = new Writable<string>("anonynmous")
+
+  const getUsername = async (p: PubKey) => {
+    if (nameTable.get().has(p)) return nameTable.get().get(p);
+    const username = await mycon(p, msgBox.api.getUsername);
+    nameTable.get().set(p, username);
+    nameTable.set(nameTable.get())
+    return username;
+  }
+
+  const bobcon = ServerLogin(serverurl, msgBox, bob).then(async (con) => {
+    con(bob.pub, msgBox.api.setUsername, "bob");
+    await con(bob.pub, msgBox.api.getFollowers).then(async (followers:PubKey[]) =>{
+      const prms = followers.map((f)=>getUsername(f))
+      await Promise.all(prms)
+    })
+  })
+
+  const mycon = await ServerLogin(serverurl, msgBox, key)
+  mycon(key.pub, msgBox.api.getUsername).then((username) => {
+    myname.set(username);
+  })
+  mycon(bob.pub, msgBox.api.follow)
+  bobcon.then(()=>{
+    loaded.set(true)
+  })
+
+  return {
+    nameTable,
+    getUsername,
+    con: mycon,
+    loaded,
+    myname,
+  }
+}
 
 
-
+export async function getSocialProvider(serverurl:string): Promise<SocialProvider> {
+  if (!socialProvider) socialProvider = await doGetSocialProvider(serverurl)
+  return socialProvider
+}
 
 export function chatView(serverurl: string) : HTMLElement{
 
-  const container = htmlElement("div", "");
-  ServerLogin(serverurl, msgBox, bob).then(async (con) => {
-    con(bob.pub, msgBox.api.setUsername, "bob");
+const container = htmlElement("div", "");
+  getSocialProvider(serverurl).then(social=>{
 
-  }).then(()=>{
-
-    ServerLogin(serverurl, msgBox, key).then(async (con) => {
-      const header = htmlElement("h1", "Logged in as ")
-      container.appendChild(header);
-      const usernameButton = htmlElement("button", "", "",);
-      usernameButton.onclick = ()=>{
-        const dia = htmlElement("div", "")
-        const close = popup(dia);
-        dia.appendChild(htmlElement("h2", "Change Username"));
-        const input = htmlElement("input", "") as HTMLInputElement;
-        input.value = myname.get();
-        input.addEventListener("keydown", async (e: KeyboardEvent) => {
-          if (e.key === "Enter") {
-            con(key.pub, msgBox.api.setUsername, input.value).then(()=>{
-              myname.set(input.value);
-            })
-            close();
-          }
-        });
-        input.focus();
-        dia.appendChild(input);
-      }
-      header.appendChild(usernameButton);
-
-
-
-      const chat_partner = new Writable<PubKey> (bob.pub)
-      const myname = new Writable<string>("anonynmous");
-
-      con(key.pub, msgBox.api.getUsername).then((username) => {
-        myname.set(username);
-      })
-
-      myname.subscribe((name) => {
-        usernameButton.innerHTML = name;
+    const header = htmlElement("h1", "Logged in as ")
+    container.appendChild(header);
+    const usernameButton = htmlElement("button", "", "",);
+    usernameButton.onclick = ()=>{
+      const dia = htmlElement("div", "")
+      const close = popup(dia);
+      dia.appendChild(htmlElement("h2", "Change Username"));
+      const input = htmlElement("input", "") as HTMLInputElement;
+      input.value = social.myname.get();
+      input.addEventListener("keydown", async (e: KeyboardEvent) => {
+        if (e.key === "Enter") {
+          social.con(key.pub, msgBox.api.setUsername, input.value).then(()=>{
+            social.myname.set(input.value);
+          })
+          close();
+        }
       });
-
-      const usernameTable = new Map<PubKey, string>();
-
-      const getUsername = async (p: PubKey) => {
-
-        if (usernameTable.has(p)) return usernameTable.get(p);
-        const username = await con(p, msgBox.api.getUsername);
-        usernameTable.set(p, username);
-        return username;
-      };
-
-      const partnerpicker = htmlElement("button", "chatting with", "", {
+      input.focus();
+      dia.appendChild(input);
+    }
+    header.appendChild(usernameButton);
 
 
-        onclick: ()=>{
+    const chat_partner = new Writable<PubKey> (bob.pub)
 
-          const ulist = htmlElement("div", "")
+
+    const partnerpicker = htmlElement("button", "chatting with", "", {
+
+      onclick: ()=>{
+        const ulist = htmlElement("div", "")
+        const close = popup(ulist)
+        const populate = ()=>{
+          ulist.innerHTML = ""
           ulist.appendChild(htmlElement("h2", "active users"));
-          const close = popup(ulist)
-          usernameTable.forEach((username, pubkey) => {
+          social.nameTable.get().forEach((username, pubkey) => {
             const userElement = htmlElement("p", username, "", {
               onclick: async () => {
-                chat_partner.set(pubkey)
-                displayMsgs();
-                close();
-              }
-            });
+              chat_partner.set(pubkey)
+              displayMsgs();
+              close();
+            }})
             ulist.appendChild(userElement);
           })
-          if (loading){
-            ulist.appendChild(htmlElement("p", "loading...", "", {style: {color: "gray"}}))
-          }
         }
-      });
-
-      container.appendChild(partnerpicker);
-      chat_partner.subscribe(async (partner) => {
-        getUsername(partner).then((username) => {
-          partnerpicker.innerHTML = `Chatting with ${username}`;
-        });
-      })
-
-
-      let loading = true
-
-
-      const msgbox = htmlElement("div", "");
-      container.appendChild(msgbox);
-
-
-      const messageInput = htmlElement("input", "") as HTMLInputElement;
-      messageInput.setAttribute("type", "text");
-      messageInput.setAttribute("placeholder", "Type a message");
-      container.appendChild(messageInput);
-
-      con(bob.pub, msgBox.api.follow)
-      .then(()=>{
-
-        con(bob.pub, msgBox.api.getFollowers).then((follower:PubKey[]) => {
-          Promise.all(follower.map(getUsername)).then(()=>{
-            loading = false
+        populate()
+        if (!social.loaded.get()){
+          const ban = htmlElement("p", "loading...", "", {style: {color: "gray"}})  
+          console.log(ban)
+          ulist.appendChild(ban)
+          social.loaded.subscribeLater(()=>{
+            populate()
+            ban.remove()
           })
-        })
+        }
+      }
+    })
 
+    container.appendChild(partnerpicker);
+    chat_partner.subscribe(async (partner) => {
+      social.getUsername(partner).then((username) => {
+        partnerpicker.innerHTML = `Chatting with ${username}`;
+      });
+    })
+
+    const msgbox = htmlElement("div", "");
+    container.appendChild(msgbox);
+
+
+    const messageInput = htmlElement("input", "") as HTMLInputElement;
+    messageInput.setAttribute("type", "text");
+    messageInput.setAttribute("placeholder", "Type a message");
+    container.appendChild(messageInput);
+
+    social.con(bob.pub, msgBox.api.follow)
+    .then(()=>{
+
+      social.con(bob.pub, msgBox.api.getFollowers).then((follower:PubKey[]) => {
+        Promise.all(follower.map(social.getUsername)).then(()=>{
+          social.loaded.set(true)
+        })
       })
 
-      const displayMsgs = () =>
-        con(key.pub, msgBox.api.seeMsgs).then(async (msgs) => {
-          msgbox.innerText = "";
-          for (let m of msgs) {
-            if (m.self !== chat_partner.get() && m.other !== chat_partner.get()) continue;
-            const name = await getUsername(m.self);
-            msgbox.appendChild(
-              htmlElement(
-                "p",
-                `${name}: ${m.content}`
-              )
-            );
-          }
-        });
+    })
 
-
-      async function sendMessage() {
-        const msg = messageInput.value;
-        if (!msg) return;
-        await con(chat_partner.get(), msgBox.api.sendMsg, msg);
-        displayMsgs();
-        messageInput.value = "";
-      }
-
-      const sendbutton = htmlElement("button", "send");
-      sendbutton.onclick = () => sendMessage();
-      messageInput.addEventListener("keydown", async (e: KeyboardEvent) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          await sendMessage();
+    const displayMsgs = () =>
+      social.con(key.pub, msgBox.api.seeMsgs).then(async (msgs) => {
+        msgbox.innerText = "";
+        for (let m of msgs) {
+          if (m.self !== chat_partner.get() && m.other !== chat_partner.get()) continue;
+          const name = await social.getUsername(m.self);
+          msgbox.appendChild(
+            htmlElement(
+              "p",
+              `${name}: ${m.content}`
+            )
+          );
         }
       });
-      container.appendChild(sendbutton);
 
-      displayMsgs();
+  
+    social.myname.subscribe((name) => {
+      usernameButton.innerHTML = name;
+      social.nameTable.get().set(key.pub, name)
+      social.nameTable.set(social.nameTable.get())
+      displayMsgs()
     })
+
+
+    async function sendMessage() {
+      const msg = messageInput.value;
+      if (!msg) return;
+      await social.con(chat_partner.get(), msgBox.api.sendMsg, msg);
+      displayMsgs();
+      messageInput.value = "";
+    }
+
+    const sendbutton = htmlElement("button", "send");
+    sendbutton.onclick = () => sendMessage();
+    messageInput.addEventListener("keydown", async (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        await sendMessage();
+      }
+    });
+    container.appendChild(sendbutton);
+
+    displayMsgs();
   })
 
   return container;

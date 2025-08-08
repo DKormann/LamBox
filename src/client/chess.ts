@@ -1,7 +1,7 @@
 
-import { PubKey } from "../auth"
+import { PubKey, storedKey } from "../auth"
 import { htmlElement } from "../html"
-import { Box, DBRow, DBTable, DefaultContext, dummyContext } from "../userspace"
+import { Box, DBRow, DBTable, DefaultContext, dummyContext, ServerLogin } from "../userspace"
 import { Serial } from "../dataSchemas"
 
 
@@ -88,29 +88,18 @@ const chessCtx = (c:DefaultContext):ChessContext=>{
     return null
   }
 
-  const strt = [10,-10,1,-1]
-  const diag = [11, -11, 9, -9]
-
+  
   function directions(p:ChessPiece):number[]{
-    switch (p.type) {
-      case "pawnmoved":
-      case "pawnmoveddouble":
-        return p.color === "white" ? [10] : [-10]
-      case "pawn":
-        return p.color === "white" ? [10, 20] : [-10, -20]
-      case "knight":
-        return [12,8,21,19,-12,8,-21,-19]
-      case "bishop":
-        return diag
-      case "rook":
-      case "rookmoved":
-        return strt
-      case "queen":
-      case "king":
-      case "kingmoved":
-        return diag.concat(strt)
+    const rook = [10,-10,1,-1]
+    const bish = [11, -11, 9, -9]
 
-    }
+    if (p.type.startsWith("pawnmoved")) return p.color === "white" ? [10] : [-10]
+    if (p.type.startsWith("pawn")) return p.color === "white" ? [10,20] : [-10,-20]
+    if (p.type.startsWith("knight")) return [12,8,21,19,-12,8,-21,-19]
+    if (p.type.startsWith("bishop")) return bish
+    if (p.type.startsWith("rook")) return rook
+    if (p.type.startsWith("queen")||p.type.startsWith("king")) return bish.concat(rook)
+    throw new Error("unknown piece type: " + p.type)
   }
 
   function posadd(start:Pos, vec:[number, number]):Pos{
@@ -250,6 +239,8 @@ type ChessContext = {
 const chessBox : Box<ChessContext> = {
   getCtx : chessCtx,
   api:{
+
+    isPlaying : async (ctx, _) => true,
     sendInvite : async (ctx, _) => {
       await Promise.all([
         ctx.add(ctx.invites.other, ctx.self),
@@ -270,7 +261,6 @@ const chessBox : Box<ChessContext> = {
         ctx.playing.other.get(),
       ])
       if (playings.some(p=>p!=null)) return false
-
       await Promise.all([
         ctx.playing.set(ctx.other),
         ctx.playing.other.set(ctx.self),
@@ -278,13 +268,36 @@ const chessBox : Box<ChessContext> = {
         ctx.invites.other.set([]),
       ])
 
-      
+      ctx.hosting.other.set({
+        white: ctx.other,
+        black: ctx.self,
+        board: ctx.startBoard,
+        turn: "white",
+        winner: null
+      })
 
+      ctx.hosting.set(null)
       return true
+    },
 
-    }
 
 
+    makeMove: async (ctx, move) =>{
+
+      let match = await ctx.hosting.other.get()
+      if (!match) return
+      match = ctx.makeMove(match, move as Move)
+      await ctx.hosting.other.set(match)
+      if (match.winner) {
+        await Promise.all([
+          ctx.hosting.other.set(null),
+          ctx.playing.set(null),
+          ctx.playing.other.set(null),
+        ])
+      }
+      return match
+    },
+    
   }
 }
 
@@ -305,6 +318,10 @@ type Pos = number
 
 
 export const chessView =  (serverurl: string) => {
+
+
+  
+
   const ctx = chessCtx(dummyContext)
   let match : Match = {
     white: dummyContext.self,
@@ -319,6 +336,8 @@ export const chessView =  (serverurl: string) => {
     "",
     "chessboard"
   )
+
+  
 
   chessBoard.style.backgroundColor = "#f0d9b5"
 
@@ -397,7 +416,9 @@ export const chessView =  (serverurl: string) => {
 
   displayBoard()
 
-  return htmlElement("div", "", "", {
+
+
+  const container = htmlElement("div", "", "", {
     children: [
       htmlElement("h1", "Chess"),
       htmlElement("p", "Welcome to the chess page"),
@@ -405,4 +426,13 @@ export const chessView =  (serverurl: string) => {
 
     ]
   })
+
+
+  const mykey = storedKey()
+
+  // ServerLogin(serverurl, chessBox, mykey){
+
+  // }
+
+  return container
 }
