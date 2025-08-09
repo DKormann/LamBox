@@ -2,6 +2,7 @@ import { auth, Key, PubKey, storedKey } from "./auth";
 import { chatView } from "./client/chat";
 import { chessView } from "./client/chess";
 import { Console } from "./client/consola";
+import { AntFarm } from "./client/antfarm";
 import { Serial } from "./dataSchemas";
 import { htmlElement, popup } from "./html";
 import { Writable } from "./store";
@@ -66,6 +67,7 @@ const apps : {
   {init: chatView, path: "chat", cache: undefined},
   {init: chessView, path: "chess", cache: undefined},
   {init: url => Console(url, cmd => eval(cmd)), path: "console", cache: undefined},
+  {init: AntFarm, path: "ecogame", cache: undefined}
 
 ]
 
