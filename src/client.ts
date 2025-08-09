@@ -67,7 +67,7 @@ const apps : {
   {init: chatView, path: "chat", cache: undefined},
   {init: chessView, path: "chess", cache: undefined},
   {init: url => Console(url, cmd => eval(cmd)), path: "console", cache: undefined},
-  {init: AntFarm, path: "ecogame", cache: undefined}
+  {init: AntFarm, path: "antfarm", cache: undefined}
 
 ]
 
