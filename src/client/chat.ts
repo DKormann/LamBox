@@ -127,7 +127,7 @@ const container = htmlElement("div", "");
     const usernameButton = htmlElement("button", "", "",);
     usernameButton.onclick = ()=>{
       const dia = htmlElement("div", "")
-      const close = popup(dia);
+      const changeName = popup(dia);
       dia.appendChild(htmlElement("h2", "Change Username"));
       const input = htmlElement("input", "") as HTMLInputElement;
       input.value = social.myname.get();
@@ -136,7 +136,7 @@ const container = htmlElement("div", "");
           social.con(key.pub, msgBox.api.setUsername, input.value).then(()=>{
             social.myname.set(input.value);
           })
-          close();
+          changeName.remove();
         }
       });
       input.focus();
@@ -152,7 +152,7 @@ const container = htmlElement("div", "");
 
       onclick: ()=>{
         const ulist = htmlElement("div", "")
-        const close = popup(ulist)
+        const usersInfo = popup(ulist)
         const populate = ()=>{
           ulist.innerHTML = ""
           ulist.appendChild(htmlElement("h2", "active users"));
@@ -161,7 +161,7 @@ const container = htmlElement("div", "");
               onclick: async () => {
               chat_partner.set(pubkey)
               displayMsgs();
-              close();
+              usersInfo.remove();
             }})
             ulist.appendChild(userElement);
           })

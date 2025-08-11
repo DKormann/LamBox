@@ -35,16 +35,14 @@ export const htmlElement = (tag:string, text:string, cls:string = "", args?:Part
 
 
 export const html = (tag:string, ...cs:(string | HTMLElement | Partial<Record<htmlKey, any>>|Writable<any>)[]):HTMLElement=>{
-  let content = ''
   let children: HTMLElement[] = []
   let args: Partial<Record<htmlKey, any>> = {}
   for (let c of cs){
-    if (typeof c === 'string') content += c
-    else if (typeof c === 'number') content += c
+    if (typeof c === 'string') children.push(htmlElement("span", c))
+    else if (typeof c === 'number') children.push(htmlElement("span", c))
     else if (c instanceof Writable){
       const el = span()
       c.subscribe((value)=>{
-        console.log("value", value)
         el.innerHTML = ""
         el.appendChild(span(value))
       })
@@ -53,28 +51,32 @@ export const html = (tag:string, ...cs:(string | HTMLElement | Partial<Record<ht
     else if (c instanceof HTMLElement) children.push(c)
     else args = {...args, ...c}
   }
-  return htmlElement(tag, content, "", {...args, children})
+  return htmlElement(tag, "", "", {...args, children})
 }
 
 
-export type HTMLGenerator = (...cs:(string | HTMLElement | Partial<Record<htmlKey, any>> | Writable<any>)[]) => HTMLElement
+export type HTMLGenerator<T extends HTMLElement = HTMLElement> = (...cs:(string | HTMLElement | Partial<Record<htmlKey, any>> | Writable<any>)[]) => T
 
-export const p:HTMLGenerator = (...cs)=>html("p", ...cs)
-export const h1:HTMLGenerator = (...cs)=>html("h1", ...cs)
-export const h2:HTMLGenerator = (...cs)=>html("h2", ...cs)
-export const h3:HTMLGenerator = (...cs)=>html("h3", ...cs)
-export const h4:HTMLGenerator = (...cs)=>html("h4", ...cs)
+const newHtmlGenerator = <T extends HTMLElement>(tag:string)=>(...cs:(string | HTMLElement | Partial<Record<htmlKey, any>> | Writable<any>)[]):T=>html(tag, ...cs) as T
 
-export const div:HTMLGenerator = (...cs)=>html("div", ...cs)
-export const button:HTMLGenerator = (...cs)=>html("button", ...cs) as HTMLButtonElement
-export const span:HTMLGenerator = (...cs)=>html("span", ...cs) as HTMLButtonElement
-export const input:HTMLGenerator = (...cs)=>html("input", ...cs) as HTMLInputElement
-export const textarea:HTMLGenerator = (...cs)=>html("textarea", ...cs) as HTMLTextAreaElement
 
-export const table:HTMLGenerator = (...cs)=>html("table", ...cs)
-export const tr:HTMLGenerator = (...cs)=>html("tr", ...cs)
-export const td:HTMLGenerator = (...cs)=>html("td", ...cs)
-export const th:HTMLGenerator = (...cs)=>html("th", ...cs)
+
+export const p:HTMLGenerator<HTMLParagraphElement> = newHtmlGenerator("p")
+export const h1:HTMLGenerator<HTMLHeadingElement> = newHtmlGenerator("h1")
+export const h2:HTMLGenerator<HTMLHeadingElement> = newHtmlGenerator("h2")
+export const h3:HTMLGenerator<HTMLHeadingElement> = newHtmlGenerator("h3")
+export const h4:HTMLGenerator<HTMLHeadingElement> = newHtmlGenerator("h4")
+
+export const div:HTMLGenerator<HTMLDivElement> = newHtmlGenerator("div")
+export const button:HTMLGenerator<HTMLButtonElement> = newHtmlGenerator("button")
+export const span:HTMLGenerator<HTMLSpanElement> = newHtmlGenerator("span")
+export const input:HTMLGenerator<HTMLInputElement> = newHtmlGenerator("input")
+export const textarea:HTMLGenerator<HTMLTextAreaElement> = newHtmlGenerator("textarea")
+
+export const table:HTMLGenerator<HTMLTableElement> = newHtmlGenerator("table")
+export const tr:HTMLGenerator<HTMLTableRowElement> = newHtmlGenerator("tr")
+export const td:HTMLGenerator<HTMLTableCellElement> = newHtmlGenerator("td")
+export const th:HTMLGenerator<HTMLTableCellElement> = newHtmlGenerator("th")
 
 
 export const popup = (dialogfield: HTMLElement)=>{
@@ -97,6 +99,6 @@ export const popup = (dialogfield: HTMLElement)=>{
     e.stopPropagation();
   }
 
-  return ()=>popupbackground.remove()
+  return popupbackground
 
 }

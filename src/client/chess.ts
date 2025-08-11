@@ -548,12 +548,12 @@ export const chessView =  (serverurl: string) => {
         social.con(pubkey, msgBox.api.sendMsg, "I sent you an invitation to play chess")
         popup(div("invitation sent!"))
       }else{
-        const close = popup(div(
+        const msg = popup(div(
           h2("this user doesnt have chess"),
           button("send them an invite message", {
             onclick: async ()=>{
               await social.con(pubkey, msgBox.api.sendMsg, "Wanna play chess with me?")
-              close()
+              msg.remove()
               popup(div("message sent!"))
             }
           }
@@ -567,7 +567,7 @@ export const chessView =  (serverurl: string) => {
         div(
           button("Play against a friend", {
             onclick: () => {
-              const close = popup(div(
+              const playbox = popup(div(
                 h2( "Play against a friend"),
 
                 (()=>{
@@ -600,11 +600,11 @@ export const chessView =  (serverurl: string) => {
                     button(username, {
                       onclick: () => {
                         inviteFriend(pubkey)
-                        close()
+                        playbox.remove()
                       }
                     }))
                   }),
-                button("Cancel", {onclick: () => close()})
+                button("Cancel", {onclick: () => playbox.remove()})
               ))
             },
           }),
