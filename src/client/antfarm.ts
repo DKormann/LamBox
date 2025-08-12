@@ -7,7 +7,7 @@ export const AntFarm = ()=>{
   const State = new Writable<number[]>([0,1])
   const game = div({id:"game"})
   const price = (l:number) => {
-    return l * 10
+    return l * 1
   }
 
   const goal = p()
