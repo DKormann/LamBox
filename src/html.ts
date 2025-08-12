@@ -31,33 +31,38 @@ export const htmlElement = (tag:string, text:string, cls:string = "", args?:Part
 }
 
 
+type HTMLArg = string | number | HTMLElement | Partial<Record<htmlKey, any>> | Writable<any> | HTMLArg[]
 
 
-
-export const html = (tag:string, ...cs:(string | HTMLElement | Partial<Record<htmlKey, any>>|Writable<any>)[]):HTMLElement=>{
+export const html = (tag:string, ...cs:HTMLArg[]):HTMLElement=>{
   let children: HTMLElement[] = []
   let args: Partial<Record<htmlKey, any>> = {}
-  for (let c of cs){
-    if (typeof c === 'string') children.push(htmlElement("span", c))
-    else if (typeof c === 'number') children.push(htmlElement("span", c))
-    else if (c instanceof Writable){
+
+  const add_arg = (arg:HTMLArg)=>{
+    if (typeof arg === 'string') children.push(htmlElement("span", arg))
+    else if (typeof arg === 'number') children.push(htmlElement("span", arg.toString()))
+    else if (arg instanceof Writable){
       const el = span()
-      c.subscribe((value)=>{
+      arg.subscribe((value)=>{
         el.innerHTML = ""
         el.appendChild(span(value))
       })
       children.push(el)
     }
-    else if (c instanceof HTMLElement) children.push(c)
-    else args = {...args, ...c}
+    else if (arg instanceof HTMLElement) children.push(arg)
+    else if (arg instanceof Array) arg.forEach(add_arg)
+    else args = {...args, ...arg}
+  }
+  for (let arg of cs){
+    add_arg(arg)
   }
   return htmlElement(tag, "", "", {...args, children})
 }
 
 
-export type HTMLGenerator<T extends HTMLElement = HTMLElement> = (...cs:(string | HTMLElement | Partial<Record<htmlKey, any>> | Writable<any>)[]) => T
+export type HTMLGenerator<T extends HTMLElement = HTMLElement> = (...cs:HTMLArg[]) => T
 
-const newHtmlGenerator = <T extends HTMLElement>(tag:string)=>(...cs:(string | HTMLElement | Partial<Record<htmlKey, any>> | Writable<any>)[]):T=>html(tag, ...cs) as T
+const newHtmlGenerator = <T extends HTMLElement>(tag:string)=>(...cs:HTMLArg[]):T=>html(tag, ...cs) as T
 
 
 

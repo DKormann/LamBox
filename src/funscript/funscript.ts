@@ -313,8 +313,6 @@ export const highlighted = (toks: token[], ast:ast):{cls:string}[][] =>{
 
 {
 
-
-  // const code = (()=>22).toString()
   const code = "function(){}"
   console.log(code)
   const toks = tokenize(code)

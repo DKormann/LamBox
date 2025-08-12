@@ -85,6 +85,36 @@ export const AntFarm = ()=>{
 
   const tut =popup(div("Your goal is to reach one million dollar but you only have 60 rounds to play. good luck!",p(), button("ok", {onclick:()=>tut.remove()})))
 
+
+  const preds = div(
+
+    table(
+      {style:{
+        margin:"auto",
+        "text-align":"right",
+        "border":"1px solid black",
+        "border-collapse":"collapse",
+        "font-family":"monospace",
+      }},
+      Array.from({length:10}, (_,i)=>i).map(x=>{
+        let st = Array.from({length:x}, (_,j)=>0).concat([1])
+
+        return tr(Array.from({length:10}, (_,j)=>j).map(y=>{
+
+          for (let i = 1; i < st.length; i++) {
+            st[i-1] += st[i]
+          }
+          return td(
+          st[0],
+          {style:{
+            border:"1px solid black",
+            padding:".4em",
+          }}
+        )})
+      )})
+    )
+  )
+
   return div(
     div(
       h2("Ant Farm"),
@@ -107,6 +137,7 @@ export const AntFarm = ()=>{
       
     }},
     button("next round", {onclick:nextround}),
+    // preds,
   )
 }
 
