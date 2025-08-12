@@ -13,7 +13,7 @@ type code = {
 
 export type token = code & {value:string, type: "number" | "string" | "boolean" | "null" | "identifier" | "symbol" | "typo" | "whitespace" | "comment"}
 
-const symbols = ["(", ")", "{", "}", "[", "]", "=>", ",", ":", "?", "=>", "!", "&&", "||", "+", "-", "*", "/", "%", "<", ">", "<=", ">=", "==", "!=", "=", ";", "...", ".", "//"]
+const symbols = ["(", ")", "{", "}", "[", "]", ",", ":", "?", "=>", "!", "&&", "||", "+", "-", "*", "/", "%", "<", ">", "<=", ">=", "==", "!=", "=", ";", "...", ".", "//"]
 
 export const seek = (code:string, start:number, pred: (c:string, i:number)=>boolean):number =>{
   const off = code.slice(start).split('').findIndex(pred)
@@ -237,7 +237,12 @@ const stringify = (ast:ast):string => {
   return ast.type + " " + ast.children.map(stringify).join(" ")
 }
 
+
+/*
+rearange ast according to operator weight precedence
+*/
 export const rearange = (nod:ast):ast => {
+
   assert(nod != undefined, "rearange error")
 
   //@ts-expect-error
@@ -313,7 +318,7 @@ export const highlighted = (toks: token[], ast:ast):{cls:string}[][] =>{
 
 {
 
-  const code = "function(){}"
+  const code = "()=>{}"
   console.log(code)
   const toks = tokenize(code)
   const ast = getAst(toks)
