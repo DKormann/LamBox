@@ -178,6 +178,17 @@ export const parse = (tokens:token[]): ast => {
 
   const parseatom = (idx:number):nullary|undefined =>  (["number", "string", "boolean", "null", "identifier"].includes(tokens[idx].type)) ? {...tokens[idx], children:[]} as nullary: undefined
 
+  const parseblock = (idx:number):ast =>{
+    const tok = tokens[idx];
+    if (tok.value == "{") {
+      const inner = parseexpr(nexttok(tok))
+      const end = tokens[nexttok(inner)]
+      if (end.value != "}") return {...end, type:"typo", value:"expected } after {", children:[]} as ast
+      return inner
+    }
+    return parseexpr(idx);
+  }
+
   const parseindivisible = (idx:number):ast => {
 
     const tok = tokens[idx]
@@ -186,7 +197,8 @@ export const parse = (tokens:token[]): ast => {
     const op = (tok.value == '-')? "neg": tok.value
 
     const res = tok.type == "symbol" ?
-      (op == "let") ? (parseindivisible(nonw(idx+1))) :
+      (op == "let" || op == "return") ? (parseindivisible(nonw(idx+1))) :
+
       "({[".includes(op) ? parsegroup(tok, nonw(idx+1)) as nary:
       unaryops.includes(op) ? astnode(op as unary['type'], [parseindivisible(nexttok(tok))]) as unary:
       typo
@@ -357,19 +369,27 @@ const test_parse = (code:string, expected:string) =>{
 }
 
 
-
 {
   // const code = "function(){return 2}"
-  const code = "() => 2"
-  console.log(tokenize(code))
+  // const code = "() => 2"
+
+  const code = (
+    ()=>{
+      let player = 22;
+      return 22
+    }
+  ).toString()
+
   console.log(code)
+  console.log(tokenize(code))
   const toks = tokenize(code)
   const ast = getAst(toks)
   const res = execAst(ast) as ast
   console.log("res:",res.toString())
-
 }
 test_parse("let a = 2; a", "=; a 2 a")
 test_parse("let a = 2; let b = 3; a + b", "=; a 2 =; b 3 + a b")
 test_parse("()=>2", "=> ()  2")
+
+
 // test_parse("function(){return 2}", "=> ()  2")
