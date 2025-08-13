@@ -27,12 +27,17 @@ export const AntFarm = ()=>{
   }
 
   const nextround = ()=>{
-    const state = State.get()
-    for (let i = 1; i < state.length; i++) {
-      state[i-1] += state[i]
-    }
     round.update(r=>r-1)
-    State.set(state,true)
+    if (round.get() < 0)return
+    State.update(st=>{
+      for (let i = 1; i < st.length; i++) {
+        st[i-1] += st[i]
+      }
+      console.log(st)
+      return st
+    },true)
+
+
   }
 
   let maxMoney = 0;
@@ -49,6 +54,8 @@ export const AntFarm = ()=>{
   }
 
   State.subscribe((levels)=>{
+
+    console.log(levels)
     maxMoney = Math.max(maxMoney, levels[0])
     goal.innerText = `reach one Million Dollar! ${maxMoney/1e4} % reached.`
     if (round.get() <= 0){
@@ -60,6 +67,8 @@ export const AntFarm = ()=>{
         popup(div('You lost! only '+maxMoney+ '$ reached.'))
       }
     }
+
+    console.log("round",round.get())
     gameDisplay.set(div(
       {style:{
         padding:"1em",
@@ -74,7 +83,11 @@ export const AntFarm = ()=>{
           td(buybutton(pr*maxnum, "+"+maxnum,()=>buyItem(i+1,maxnum)))
         )
       }))),
-      p({style:{marginBottom:"2em"}})
+      p({style:{marginBottom:"2em"}}),
+      (round.get() <= 0) ? button("reset", {onclick:()=>{
+        round.set(60)
+        State.set([0,1])
+      }}) : button("next round", {onclick:nextround})
     ))
 
     
@@ -86,7 +99,7 @@ export const AntFarm = ()=>{
   const tut =popup(div("Your goal is to reach one million dollar but you only have 60 rounds to play. good luck!",p(), button("ok", {onclick:()=>tut.remove()})))
 
 
-  const preds = div(
+  const helper = div(
 
     table(
       {style:{
@@ -125,7 +138,6 @@ export const AntFarm = ()=>{
         top: "0",
         textAlign: "center",
         width: "100%",
-        // "background-color": "white",
       }},
       tut,
     ),
@@ -133,11 +145,8 @@ export const AntFarm = ()=>{
     gameDisplay,
     {
       id:"parent",
-      style:{
-      
-    }},
-    button("next round", {onclick:nextround}),
-    // preds,
+    },
+    // helper,
   )
 }
 
