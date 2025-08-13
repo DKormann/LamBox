@@ -137,7 +137,7 @@ export const AntFarm = ()=>{
       
     }},
     button("next round", {onclick:nextround}),
-    // preds,
+    preds,
   )
 }
 

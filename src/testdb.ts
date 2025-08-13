@@ -1,4 +1,4 @@
-import { saveLambda, getLambda, getAllLambdas, deleteLambda } from './sqliteStore';
+import { saveLambda, getLambda } from './sqliteStore.js';
 
 const hash = 'abc123';
 const code = `function hello() { console.log("Hello from DB!"); }`;
@@ -8,6 +8,4 @@ saveLambda(hash, code);
 
 console.log('--- Get Function ---');
 const loaded = getLambda(hash);
-console.log('Lambda caricata:', loaded);
-
-console.log(getAllLambdas());
+console.log('Lambda loaded:', loaded);

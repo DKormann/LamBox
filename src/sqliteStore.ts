@@ -1,7 +1,11 @@
 import Database from 'better-sqlite3';
-import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const dbPath = path.join(__dirname, '../data.db');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const dbPath = join(__dirname, '../data.db');
 const db = new Database(dbPath);
 
 db.prepare(`
@@ -19,13 +23,15 @@ export function saveLambda(hash: string, code: string) {
 }
 
 export function getLambda(hash: string): string | null {
-  const row = db.prepare('SELECT code FROM lambdas WHERE hash = ?').get(hash);
+  const row = db
+    .prepare('SELECT code FROM lambdas WHERE hash = ?')
+    .get(hash) as { code: string } | undefined;
   return row ? row.code : null;
 }
 
-export function getAllLambdas(): { hash: string; code: string }[] {
-  return db.prepare('SELECT hash, code FROM lambdas').all();
-}
+// export function getAllLambdas(): { hash: string; code: string }[] {
+//   return db.prepare('SELECT hash, code FROM lambdas').all();
+// }
 
 export function deleteLambda(hash: string) {
   db.prepare('DELETE FROM lambdas WHERE hash = ?').run(hash);
