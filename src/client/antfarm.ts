@@ -125,7 +125,7 @@ export const AntFarm = ()=>{
         top: "0",
         textAlign: "center",
         width: "100%",
-        "background-color": "white",
+        // "background-color": "white",
       }},
       tut,
     ),
