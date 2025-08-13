@@ -1,7 +1,7 @@
 {
   "name": "nodebox",
   "private": true,
-  "type":"module",
+  "type": "module",
   "version": "0.0.0",
   "scripts": {
     "dev": "vite",
@@ -11,11 +11,13 @@
     "start:server": "node dist/server.js"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "tsx": "^4.0.1",
     "typescript": "^5.9.2",
     "vite": "^5.0.12"
   },
   "dependencies": {
+    "better-sqlite3": "^12.2.0",
     "nostr-tools": "^2.16.1",
     "vm2": "^3.9.19"
   }
