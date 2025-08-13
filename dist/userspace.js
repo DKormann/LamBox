@@ -45,7 +45,7 @@ var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
     return to.concat(ar || Array.prototype.slice.call(from));
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SHA256 = void 0;
+exports.dummyContext = exports.SHA256 = void 0;
 exports.ServerLogin = ServerLogin;
 exports.Box2Serial = Box2Serial;
 var auth_1 = require("./auth");
@@ -145,6 +145,24 @@ function ServerLogin(url, box, key) {
         });
     });
 }
+exports.dummyContext = {
+    self: "npub1self",
+    other: "npub1other",
+    getTable: function (key, defaultValue) {
+        return {
+            get: function () { return Promise.resolve(defaultValue); },
+            set: function () { return Promise.resolve(); },
+            update: function () { return Promise.resolve(); },
+            delete: function () { return Promise.resolve(); },
+            other: {
+                get: function () { return Promise.resolve(defaultValue); },
+                set: function () { return Promise.resolve(); },
+                update: function () { return Promise.resolve(); },
+                delete: function () { return Promise.resolve(); },
+            }
+        };
+    }
+};
 function exampleAPI(c) {
     var friends = c.getTable("friends", []);
     return {

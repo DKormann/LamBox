@@ -53,6 +53,7 @@ exports.acceptHost = acceptHost;
 exports.acceptCall = acceptCall;
 var nostr_tools_1 = require("nostr-tools");
 var worker_threads_1 = require("worker_threads");
+var fs_1 = require("fs");
 var db = {
     lambdas: new Map(),
     apps: new Map(),
@@ -90,6 +91,7 @@ function acceptPublish(request) {
                 var key = _a[0], value = _a[1];
                 db.lambdas.set(apiHashes[key], value);
             });
+            fs_1.default.writeFileSync("db.json", JSON.stringify(db));
             return [2 /*return*/, null];
         });
     });

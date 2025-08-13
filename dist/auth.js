@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.signEvent = exports.auth = void 0;
+exports.signEvent = exports.bob = exports.auth = void 0;
 exports.storedKey = storedKey;
 var nostr_tools_1 = require("nostr-tools");
 function storedKey(location) {
@@ -28,6 +28,7 @@ exports.auth = {
     },
     checkEvent: function (e) { return (0, nostr_tools_1.verifyEvent)(e); }
 };
+exports.bob = exports.auth.keyFromNsec("nsec1qp3y43jmsdr665dc2gxmaxm6e5pqtyhqdr3zsfa902j2vr3tcpysrwnux0");
 function secFromString(str) {
     if (str.startsWith("nsec1"))
         return str;
